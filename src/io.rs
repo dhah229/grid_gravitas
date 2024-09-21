@@ -25,7 +25,6 @@ use crate::cli::Cli;
 pub fn read_lat_lon(file: &netcdf::File, args: &Cli) -> Result<(ndarray::Array2<f32>, ndarray::Array2<f32>), Box<dyn Error>> {
 
     // Unpack dimension and variable names
-    let (_dim_lon, _dim_lat) = (&args.dimname[0], &args.dimname[1]);
     let (var_lon, var_lat) = (&args.varname[0], &args.varname[1]);
     
     let lat_var = file
