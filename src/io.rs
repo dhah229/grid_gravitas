@@ -15,6 +15,7 @@ use gdal::{
     Dataset as GdalDataset,
     spatial_ref::{CoordTransform, SpatialRef},
     vector::LayerAccess,
+    vector::OGRFieldType,
 };
 
 use crate::utils::{dims_match, dims_match_reversed, RvnGridWeights};
@@ -120,7 +121,7 @@ pub fn read_shapefile(
     path: &Path,
     key_colname: &str,
     target_epsg: &str,
-) -> Result<HashMap<i32, GeoGeometry<f64>>, Box<dyn Error>> {
+) -> Result<HashMap<String, GeoGeometry<f64>>, Box<dyn Error>> {
     // Open the shapefile dataset
     let dataset = GdalDataset::open(path)?;
 
@@ -163,10 +164,16 @@ pub fn read_shapefile(
 
         // Get the basin ID (adjust field type and name as needed)
         let field_value = feature.field(key_colname)?.ok_or("Field not found")?;
-        let basin_id: i32 = field_value
-            .into_int()
-            .ok_or("Invalid basin ID field")?;
 
+        let basin_id = match field_value.ogr_field_type() {
+            OGRFieldType::OFTString => {
+                field_value.into_string().ok_or("Failed to get string value")?
+            },
+            OGRFieldType::OFTInteger => {
+                field_value.into_int().ok_or("Failed to get integer value")?.to_string()
+            },
+            _ => return Err("Invalid basin ID field".into()),
+        };
         geometries.insert(basin_id, geo_geometry);
     }
 
@@ -202,7 +209,8 @@ pub fn write_netcdf_output(file_path: &Path, netcdf_data: &Vec<(f64, usize, usiz
 
 /// Write intersection data to a .txt file
 pub fn write_txt_output(output_path: &Path, rvn_data: &mut RvnGridWeights) -> Result<(), Box<dyn Error>> {
-    rvn_data.txt_data.sort_by_key(|k| k.0);
+    // rvn_data.txt_data.sort_by_key(|k| &k.0);
+    rvn_data.txt_data.sort_by(|a, b| a.0.cmp(&b.0));
     let output_file = File::create(output_path)?;
     let mut writer = BufWriter::new(output_file);
     writeln!(writer, ":GridWeights")?;

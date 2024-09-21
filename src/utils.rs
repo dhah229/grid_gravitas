@@ -1,6 +1,7 @@
 
+#[derive(Debug)]
 pub struct RvnGridWeights {
-    pub txt_data: Vec<(i32, usize, f64)>,
+    pub txt_data: Vec<(String, usize, f64)>,
     pub nsubbasins: i32,
     pub ncells: i32,
 }

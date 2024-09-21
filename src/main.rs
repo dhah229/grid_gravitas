@@ -32,8 +32,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Process the shape intersections with grid cells
     let (netcdf_data, mut rvn_data) = process_shape_intersections(
         nlat, nlon, 
-        &grid_cell_geom, 
-        &shapes,
+        grid_cell_geom, 
+        shapes,
     )?;
 
     // Write to output file

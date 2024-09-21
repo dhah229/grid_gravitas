@@ -206,16 +206,18 @@ fn calculate_area(geometry: &Geometry) -> f64 {
 pub fn process_shape_intersections(
     nlat: usize, 
     nlon: usize, 
-    grid_cell_geom: &Vec<Vec<Polygon<f64>>>, 
-    shapes: &HashMap<i32, geo_types::Geometry>, 
+    grid_cell_geom: Vec<Vec<Polygon<f64>>>, 
+    shapes: HashMap<String, geo_types::Geometry>, 
 ) -> Result<(Vec<(f64, usize, usize)>, RvnGridWeights), Box<dyn Error>> {
+    let nsubbasins = shapes.len() as i32;
+    let ncells = (nlat * nlon) as i32;
     let mut netcdf_data = Vec::new();
     let mut txt_data = Vec::new();
 
     // 5 percent area error threshold
     let area_error_threshold = 0.05;
 
-    for (index, (basin_id, shape_geometry)) in shapes.iter().enumerate() {
+    for (index, (basin_id, shape_geometry)) in shapes.into_iter().enumerate() {
         let shape_area = match shape_geometry {
             Geometry::Polygon(ref poly) => poly.unsigned_area(),
             Geometry::MultiPolygon(ref mpoly) => mpoly.unsigned_area(),
@@ -232,7 +234,7 @@ pub fn process_shape_intersections(
                 let grid_envelope = grid_cell.bounding_rect().ok_or("Failed to get bounding rectangle")?;
 
                 if grid_envelope.intersects(&shape_envelope) {
-                    let intersection = calculate_intersection(grid_cell, shape_geometry);
+                    let intersection = calculate_intersection(grid_cell, &shape_geometry);
                     if let Some(intersection_geom) = intersection {
                         let area_intersect = calculate_area(&intersection_geom);
                         if area_intersect > 0.0 {
@@ -248,27 +250,27 @@ pub fn process_shape_intersections(
         // Calculate error
         let error = (shape_area - area_all) / shape_area;
 
-        // Handle the error correction and write out data
+        // Cloning basin_id shouldn't be too bad since they should be short.
         if error.abs() > area_error_threshold && shape_area > 500_000.0 {
             println!("Error for basin {}: {:.2}%", basin_id, error * 100.0);
-            for (cell_id, fraction) in &cellid_fraction {
-                netcdf_data.push((*fraction, (cell_id + 1), (index + 1)));
-                txt_data.push((*basin_id, *cell_id, *fraction))
+            for (cell_id, fraction) in cellid_fraction {
+                netcdf_data.push((fraction, (cell_id + 1), (index + 1)));
+                txt_data.push((basin_id.clone(), cell_id, fraction))
             }
         } else {
             // Adjust such that weights sum up to 1.0
             let correction_factor = 1.0 / (1.0 - error);
-            for (cell_id, fraction) in &cellid_fraction {
+            for (cell_id, fraction) in cellid_fraction {
                 let corrected = fraction * correction_factor;
                 netcdf_data.push((corrected, (cell_id + 1), (index + 1)));
-                txt_data.push((*basin_id, *cell_id, corrected))
+                txt_data.push((basin_id.clone(), cell_id, corrected))
             }
         }
     }
     let rvn_data = RvnGridWeights {
         txt_data,
-        nsubbasins: shapes.len() as i32,
-        ncells: nlat as i32 * nlon as i32,
+        nsubbasins,
+        ncells,
     };
 
     Ok((netcdf_data, rvn_data))
