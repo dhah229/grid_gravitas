@@ -13,7 +13,6 @@ use geo::{
     BoundingRect,
     Geometry,
     HasDimensions,
-    Intersects,
     MultiPolygon,
     Coord,
     LineString,
@@ -21,12 +20,15 @@ use geo::{
     Polygon,
 };
 
+use rstar::AABB;
+
 use crate::utils::RvnGridWeights;
 use crate::io::read_lat_lon;
 use crate::cli::Cli;
+use crate::rtree::build_grid_rtree;
 
 
-
+// Create a meshgrid from 1D arrays of latitude and longitude
 pub fn meshgrid(lat: &Array<f32, ndarray::Ix1>, lon: &Array<f32, ndarray::Ix1>) -> (Array<f32, ndarray::Ix2>, Array<f32, ndarray::Ix2>) {
     // Create 2D longitude by repeating lon along the rows
     let lon_2d = Array::from_shape_fn((lat.len(), lon.len()), |(_, j)| lon[j]);
@@ -98,6 +100,7 @@ pub fn create_gridcells_from_centers(lat: &Array2<f32>, lon: &Array2<f32>) -> (A
     (lath, lonh)
 }
 
+// Convert a list of coordinates to a Polygon
 pub fn shape_to_geometry(
     shape_coord: &[[f64; 2]],
     proj: &Proj,
@@ -207,7 +210,7 @@ pub fn process_shape_intersections(
     nlat: usize, 
     nlon: usize, 
     grid_cell_geom: Vec<Vec<Polygon<f64>>>, 
-    shapes: HashMap<String, geo_types::Geometry>, 
+    shapes: HashMap<String, Geometry>, 
 ) -> Result<(Vec<(f64, usize, usize)>, RvnGridWeights), Box<dyn Error>> {
     let nsubbasins = shapes.len() as i32;
     let ncells = (nlat * nlon) as i32;
@@ -217,6 +220,10 @@ pub fn process_shape_intersections(
     // 5 percent area error threshold
     let area_error_threshold = 0.05;
 
+    // Build the R-tree from grid cells
+    let rtree = build_grid_rtree(grid_cell_geom);
+
+    // Iterate over the basins and calculate the intersection with grid cells
     for (index, (basin_id, shape_geometry)) in shapes.into_iter().enumerate() {
         let shape_area = match shape_geometry {
             Geometry::Polygon(ref poly) => poly.unsigned_area(),
@@ -228,25 +235,25 @@ pub fn process_shape_intersections(
         let mut area_all = 0.0;
         let mut cellid_fraction = Vec::new();
 
-        for ilat in 0..nlat {
-            for ilon in 0..nlon {
-                let grid_cell = &grid_cell_geom[ilat][ilon];
-                let grid_envelope = grid_cell.bounding_rect().ok_or("Failed to get bounding rectangle")?;
+        // Query the R-tree for grid cells intersecting the shape's bounding rectangle
+        let candidate_cells = rtree.locate_in_envelope_intersecting(&AABB::from_corners(
+            [shape_envelope.min().x, shape_envelope.min().y],
+            [shape_envelope.max().x, shape_envelope.max().y],
+        ));
 
-                if grid_envelope.intersects(&shape_envelope) {
-                    let intersection = calculate_intersection(grid_cell, &shape_geometry);
-                    if let Some(intersection_geom) = intersection {
-                        let area_intersect = calculate_area(&intersection_geom);
-                        if area_intersect > 0.0 {
-                            area_all += area_intersect;
-                            let cell_id = ilat * nlon + ilon;
-                            let fraction = area_intersect / shape_area;
-                            cellid_fraction.push((cell_id, fraction));
-                        }
-                    }
+        for grid_cell in candidate_cells {
+            let intersection = calculate_intersection(&grid_cell.polygon, &shape_geometry);
+            if let Some(intersection_geom) = intersection {
+                let area_intersect = calculate_area(&intersection_geom);
+                if area_intersect > 0.0 {
+                    area_all += area_intersect;
+                    let cell_id = grid_cell.ilat * nlon + grid_cell.ilon;
+                    let fraction = area_intersect / shape_area;
+                    cellid_fraction.push((cell_id, fraction));
                 }
             }
         }
+
         // Calculate error
         let error = (shape_area - area_all) / shape_area;
 

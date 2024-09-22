@@ -169,10 +169,9 @@ pub fn read_shapefile(
             OGRFieldType::OFTString => {
                 field_value.into_string().ok_or("Failed to get string value")?
             },
-            OGRFieldType::OFTInteger => {
+            _ => {
                 field_value.into_int().ok_or("Failed to get integer value")?.to_string()
             },
-            _ => return Err("Invalid basin ID field".into()),
         };
         geometries.insert(basin_id, geo_geometry);
     }
@@ -209,8 +208,13 @@ pub fn write_netcdf_output(file_path: &Path, netcdf_data: &Vec<(f64, usize, usiz
 
 /// Write intersection data to a .txt file
 pub fn write_txt_output(output_path: &Path, rvn_data: &mut RvnGridWeights) -> Result<(), Box<dyn Error>> {
-    // rvn_data.txt_data.sort_by_key(|k| &k.0);
-    rvn_data.txt_data.sort_by(|a, b| a.0.cmp(&b.0));
+    // Sort txt_data by the integer value of the first element (converted from String)
+    rvn_data.txt_data.sort_by(|a, b| {
+        // Parse the first element of each tuple to i32
+        let a_id: i32 = a.0.parse().expect("Failed to parse basin_id to i32");
+        let b_id: i32 = b.0.parse().expect("Failed to parse basin_id to i32");
+        a_id.cmp(&b_id)
+    });
     let output_file = File::create(output_path)?;
     let mut writer = BufWriter::new(output_file);
     writeln!(writer, ":GridWeights")?;
