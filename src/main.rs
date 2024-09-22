@@ -2,6 +2,7 @@ mod io;
 mod geometry;
 mod utils;
 mod cli;
+mod rtree;
 
 use std::{
     error::Error,
