@@ -28,7 +28,7 @@ use crate::cli::Cli;
 use crate::rtree::build_grid_rtree;
 
 
-
+// Create a meshgrid from 1D arrays of latitude and longitude
 pub fn meshgrid(lat: &Array<f32, ndarray::Ix1>, lon: &Array<f32, ndarray::Ix1>) -> (Array<f32, ndarray::Ix2>, Array<f32, ndarray::Ix2>) {
     // Create 2D longitude by repeating lon along the rows
     let lon_2d = Array::from_shape_fn((lat.len(), lon.len()), |(_, j)| lon[j]);
@@ -100,6 +100,7 @@ pub fn create_gridcells_from_centers(lat: &Array2<f32>, lon: &Array2<f32>) -> (A
     (lath, lonh)
 }
 
+// Convert a list of coordinates to a Polygon
 pub fn shape_to_geometry(
     shape_coord: &[[f64; 2]],
     proj: &Proj,
