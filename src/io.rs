@@ -169,10 +169,9 @@ pub fn read_shapefile(
             OGRFieldType::OFTString => {
                 field_value.into_string().ok_or("Failed to get string value")?
             },
-            OGRFieldType::OFTInteger => {
+            _ => {
                 field_value.into_int().ok_or("Failed to get integer value")?.to_string()
             },
-            _ => return Err("Invalid basin ID field".into()),
         };
         geometries.insert(basin_id, geo_geometry);
     }
