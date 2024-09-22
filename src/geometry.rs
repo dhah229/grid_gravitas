@@ -24,7 +24,8 @@ use rstar::AABB;
 
 use crate::utils::RvnGridWeights;
 use crate::io::read_lat_lon;
-use crate::cli::Cli;use crate::rtree::build_grid_rtree;
+use crate::cli::Cli;
+use crate::rtree::build_grid_rtree;
 
 
 
