@@ -27,15 +27,15 @@ impl PartialEq for GridCell {
 
 impl Eq for GridCell {}
 
-pub fn build_grid_rtree(grid_cell_geom: &Vec<Vec<Polygon<f64>>>) -> RTree<GridCell> {
+pub fn build_grid_rtree(grid_cell_geom: Vec<Vec<Polygon<f64>>>) -> RTree<GridCell> {
     let mut grid_cells = Vec::new();
 
-    for (ilat, row) in grid_cell_geom.iter().enumerate() {
-        for (ilon, polygon) in row.iter().enumerate() {
+    for (ilat, row) in grid_cell_geom.into_iter().enumerate() {
+        for (ilon, polygon) in row.into_iter().enumerate() {
             grid_cells.push(GridCell {
                 ilat,
                 ilon,
-                polygon: polygon.clone(),
+                polygon: polygon,
             });
         }
     }

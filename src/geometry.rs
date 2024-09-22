@@ -220,8 +220,9 @@ pub fn process_shape_intersections(
     let area_error_threshold = 0.05;
 
     // Build the R-tree from grid cells
-    let rtree = build_grid_rtree(&grid_cell_geom);
+    let rtree = build_grid_rtree(grid_cell_geom);
 
+    // Iterate over the basins and calculate the intersection with grid cells
     for (index, (basin_id, shape_geometry)) in shapes.into_iter().enumerate() {
         let shape_area = match shape_geometry {
             Geometry::Polygon(ref poly) => poly.unsigned_area(),
