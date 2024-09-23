@@ -156,7 +156,7 @@ pub fn create_grid_cells(
     lonh: &Array2<f32>
 ) -> Result<Vec<Vec<Polygon<f64>>>, Box<dyn Error>> {
     let mut grid_cell_geom: Vec<Vec<Polygon<f64>>> = Vec::with_capacity(nlat);
-    let proj = Proj::new_known_crs("EPSG:4326", "EPSG:3573", None).expect("Failed to create projection");
+    let proj = Proj::new_known_crs("EPSG:4326", "EPSG:8857", None).expect("Failed to create projection");
 
     for ilat in 0..nlat {
         let mut row: Vec<Polygon<f64>> = Vec::with_capacity(nlon);

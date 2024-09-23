@@ -246,7 +246,7 @@ mod tests {
         let result = read_shapefile(
            path, 
             "HRU_ID", 
-            "3573",
+            "8857",
         );
         
         assert!(result.is_ok());
@@ -260,7 +260,7 @@ mod tests {
         let result = read_shapefile(
            path, 
             "HRU_ID", 
-            "3573",
+            "8857",
         );
         
         assert!(result.is_err());

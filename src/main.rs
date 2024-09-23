@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let grid_cell_geom = create_grid_cells(nlat, nlon, &lath, &lonh)?;
 
     // Get the shapefile ID and geometry to a HashMap
-    let shapes = read_shapefile(Path::new(&args.shp), &args.col, "3573")?;
+    let shapes = read_shapefile(Path::new(&args.shp), &args.col, "8857")?;
 
     // Process the shape intersections with grid cells
     let (netcdf_data, mut rvn_data) = process_shape_intersections(
