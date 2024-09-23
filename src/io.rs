@@ -278,6 +278,7 @@ mod tests {
             col: "HRU_ID".to_string(),
             out: "output.nc".to_string(),
             rv_out: false,
+            grd_bnds: false,
         };
         let result = read_lat_lon(&file, &args);        
         assert!(result.is_ok());

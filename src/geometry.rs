@@ -136,7 +136,11 @@ pub fn process_lat_lon(args: &Cli) -> Result<(Array2<f32>, Array2<f32>, usize, u
     let file = netcdf::open(Path::new(&args.nc)).expect("Failed to open file.");
     let (lat_2d, lon_2d) = read_lat_lon(&file, &args).expect("Failed to read lat/lon");
 
-    let (lath, lonh) = create_gridcells_from_centers(&lat_2d, &lon_2d);
+    let (lath, lonh) = if args.grd_bnds {
+        (lat_2d, lon_2d)
+    } else {
+        create_gridcells_from_centers(&lat_2d, &lon_2d)
+    };
     
     let nlat = lath.nrows() - 1;
     let nlon = lonh.ncols() - 1;

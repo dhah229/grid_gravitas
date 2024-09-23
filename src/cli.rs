@@ -26,6 +26,10 @@ pub struct Cli {
     #[arg(short = 'c', long, default_value = "ID")]
     pub col: String,
 
+    /// Flag if coordinates refer to grid centers (default) or grid bounds
+    #[arg(short = 'b', long)]
+    pub grd_bnds: bool,
+
     /// Path to the output file
     #[arg(short = 'o', long, default_value = "output.nc")]
     pub out: String,
