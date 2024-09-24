@@ -279,6 +279,7 @@ mod tests {
             out: "output.nc".to_string(),
             rv_out: false,
             grd_bnds: false,
+            parallel: false,
         };
         let result = read_lat_lon(&file, &args);        
         assert!(result.is_ok());

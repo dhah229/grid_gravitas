@@ -1,6 +1,3 @@
-use ndarray::{s, Array, Array2, Zip};
-use proj::Proj;
-
 use std::{
     error::Error,
     path::Path,
@@ -21,6 +18,9 @@ use geo::{
 };
 
 use rstar::AABB;
+use rayon::prelude::*;
+use ndarray::{s, Array, Array2, Zip};
+use proj::Proj;
 
 use crate::utils::RvnGridWeights;
 use crate::io::read_lat_lon;
@@ -222,7 +222,7 @@ pub fn process_shape_intersections(
     let mut netcdf_data = Vec::new();
     let mut txt_data = Vec::new();
 
-    // 5 percent area error threshold
+    // 5 percent area error threshold. Is 5 percent enough?
     let area_error_threshold = 0.05;
 
     // Build the R-tree from grid cells
@@ -233,7 +233,7 @@ pub fn process_shape_intersections(
         let shape_area = match shape_geometry {
             Geometry::Polygon(ref poly) => poly.unsigned_area(),
             Geometry::MultiPolygon(ref mpoly) => mpoly.unsigned_area(),
-            _ => continue,
+            _ => continue, // Skip if not polygon or multipolygon
         };
 
         let shape_envelope = shape_geometry.bounding_rect().ok_or("Failed to get bounding rectangle")?;
@@ -287,6 +287,114 @@ pub fn process_shape_intersections(
 
     Ok((netcdf_data, rvn_data))
 }
+
+/// Parallel process the shape intersections with grid cells and collect results
+pub fn parallel_process_shape_intersections(
+    nlat: usize,
+    nlon: usize,
+    grid_cell_geom: Vec<Vec<Polygon<f64>>>,
+    shapes: HashMap<String, Geometry>,
+) -> Result<(Vec<(f64, usize, usize)>, RvnGridWeights), Box<dyn Error>> {
+    let nsubbasins = shapes.len() as i32;
+    let ncells = (nlat * nlon) as i32;
+
+    // 5 percent area error threshold
+    let area_error_threshold = 0.05;
+
+    // Build the R-tree from grid cells
+    let rtree = build_grid_rtree(grid_cell_geom);
+
+    // Convert the HashMap into a Vec to use par_iter().enumerate()
+    let shapes_vec: Vec<(String, Geometry)> = shapes.into_iter().collect();
+
+    // Use Rayon to parallelize the loop
+    // Do I truly understand this? Nope.
+    let results: Vec<_> = shapes_vec
+        .par_iter()
+        .enumerate()
+        .map(|(index, (basin_id, shape_geometry))| {
+            let mut netcdf_data_chunk = Vec::new();
+            let mut txt_data_chunk = Vec::new();
+
+            // Calculate the area of the shape
+            let shape_area = match shape_geometry {
+                Geometry::Polygon(ref poly) => poly.unsigned_area(),
+                Geometry::MultiPolygon(ref mpoly) => mpoly.unsigned_area(),
+                _ => {
+                    // Skip if not polygon or multipolygon
+                    return (netcdf_data_chunk, txt_data_chunk);
+                }
+            };
+
+            // Get the bounding rectangle of the shape
+            let shape_envelope = match shape_geometry.bounding_rect() {
+                Some(env) => env,
+                None => {
+                    // Cannot get bounding rectangle, skip this geometry
+                    return (netcdf_data_chunk, txt_data_chunk);
+                }
+            };
+
+            let mut area_all = 0.0;
+            let mut cellid_fraction = Vec::new();
+
+            let candidate_cells = rtree.locate_in_envelope_intersecting(&AABB::from_corners(
+                [shape_envelope.min().x, shape_envelope.min().y],
+                [shape_envelope.max().x, shape_envelope.max().y],
+            ));
+
+            for grid_cell in candidate_cells {
+                let intersection = calculate_intersection(&grid_cell.polygon, shape_geometry);
+                if let Some(intersection_geom) = intersection {
+                    let area_intersect = calculate_area(&intersection_geom);
+                    if area_intersect > 0.0 {
+                        area_all += area_intersect;
+                        let cell_id = grid_cell.ilat * nlon + grid_cell.ilon;
+                        let fraction = area_intersect / shape_area;
+                        cellid_fraction.push((cell_id, fraction));
+                    }
+                }
+            }
+
+            let error = (shape_area - area_all) / shape_area;
+
+            if error.abs() > area_error_threshold && shape_area > 500_000.0 {
+                println!("Error for basin {}: {:.2}%", basin_id, error * 100.0);
+                for (cell_id, fraction) in cellid_fraction {
+                    netcdf_data_chunk.push((fraction, cell_id + 1, index + 1));
+                    txt_data_chunk.push((basin_id.clone(), cell_id, fraction));
+                }
+            } else {
+                let correction_factor = 1.0 / (1.0 - error);
+                for (cell_id, fraction) in cellid_fraction {
+                    let corrected = fraction * correction_factor;
+                    netcdf_data_chunk.push((corrected, cell_id + 1, index + 1));
+                    txt_data_chunk.push((basin_id.clone(), cell_id, corrected));
+                }
+            }
+
+            (netcdf_data_chunk, txt_data_chunk)
+        })
+        .collect();
+
+    // Combine the results from all threads
+    let mut netcdf_data = Vec::new();
+    let mut txt_data = Vec::new();
+
+    for (netcdf_chunk, txt_chunk) in results {
+        netcdf_data.extend(netcdf_chunk);
+        txt_data.extend(txt_chunk);
+    }
+
+    let rvn_data = RvnGridWeights {
+        txt_data,
+        nsubbasins,
+        ncells,
+    };
+
+    Ok((netcdf_data, rvn_data))
+}
+
 
 #[cfg(test)]
 mod tests {

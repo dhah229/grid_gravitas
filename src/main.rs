@@ -16,6 +16,7 @@ use geometry::{
     process_lat_lon, 
     create_grid_cells, 
     process_shape_intersections,
+    parallel_process_shape_intersections,
 };
 use cli::Cli;
 
@@ -31,11 +32,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     let shapes = read_shapefile(Path::new(&args.shp), &args.col, "8857")?;
 
     // Process the shape intersections with grid cells
-    let (netcdf_data, mut rvn_data) = process_shape_intersections(
-        nlat, nlon, 
-        grid_cell_geom, 
-        shapes,
-    )?;
+    let (netcdf_data, mut rvn_data) = if args.parallel {
+        parallel_process_shape_intersections(
+            nlat, nlon, 
+            grid_cell_geom, 
+            shapes,
+        )?
+    } else {
+        process_shape_intersections(
+            nlat, nlon, 
+            grid_cell_geom, 
+            shapes,
+        )?
+    };
 
     // Write to output file
     let output_path = Path::new(&args.out);

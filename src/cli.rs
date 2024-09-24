@@ -38,6 +38,10 @@ pub struct Cli {
     #[arg(short = 'r', long)]
     pub rv_out: bool,
 
+    /// Flag for parallel processing
+    #[arg(short = 'p', long)]
+    pub parallel: bool,
+
 }
 
 
@@ -70,6 +74,7 @@ mod tests {
             "-c", "custom_id",
             "-o", "custom_output.nc",
             "-r",
+            "-p",
         ];
         let cli = Cli::parse_from(args);
 
@@ -80,5 +85,6 @@ mod tests {
         assert_eq!(cli.col, "custom_id");
         assert_eq!(cli.out, "custom_output.nc");
         assert_eq!(cli.rv_out, true);
+        assert_eq!(cli.parallel, true);
     }
 }
