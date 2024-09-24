@@ -18,7 +18,6 @@ impl RTreeObject for GridCell {
     }
 }
 
-// Implement PartialEq and Eq if needed
 impl PartialEq for GridCell {
     fn eq(&self, other: &Self) -> bool {
         self.ilat == other.ilat && self.ilon == other.ilon
@@ -27,6 +26,7 @@ impl PartialEq for GridCell {
 
 impl Eq for GridCell {}
 
+// Probably need to change this we are not doing vec of vecs.
 pub fn build_grid_rtree(grid_cell_geom: Vec<Vec<Polygon<f64>>>) -> RTree<GridCell> {
     let mut grid_cells = Vec::new();
 

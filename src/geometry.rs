@@ -148,7 +148,8 @@ pub fn process_lat_lon(args: &Cli) -> Result<(Array2<f32>, Array2<f32>, usize, u
     Ok((lath, lonh, nlat, nlon))
 }
 
-/// Create grid cells and store them as geometries
+/// Create grid cells and store them as geometries 
+/// TODO: Don't use Vec of Vecs and use a single Vec instead.
 pub fn create_grid_cells(
     nlat: usize, 
     nlon: usize, 
