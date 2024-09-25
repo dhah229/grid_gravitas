@@ -17,7 +17,7 @@ use geo::{
     Polygon,
 };
 
-use rstar::AABB;
+use rstar::{AABB, RTree};
 use rayon::prelude::*;
 use ndarray::{s, Array, Array2, Zip};
 use proj::Proj;
@@ -25,7 +25,7 @@ use proj::Proj;
 use crate::utils::RvnGridWeights;
 use crate::io::read_lat_lon;
 use crate::cli::Cli;
-use crate::rtree::build_grid_rtree;
+use crate::rtree::{build_grid_rtree, GridCell};
 
 
 // Create a meshgrid from 1D arrays of latitude and longitude
@@ -209,6 +209,74 @@ fn calculate_area(geometry: &Geometry) -> f64 {
     }
 }
 
+/// Used to process a single shape and calculate the intersection with grid cells
+fn process_single_shape_intersection(
+    basin_id: &String,
+    shape_geometry: &Geometry,
+    rtree: &RTree<GridCell>,
+    nlon: usize,
+    area_error_threshold: f64,
+    index: usize,
+) -> (Vec<(f64, usize, usize)>, Vec<(String, usize, f64)>) {
+    let mut netcdf_data_chunk = Vec::new();
+    let mut txt_data_chunk = Vec::new();
+
+    // Calculate the area of the shape
+    let shape_area = match shape_geometry {
+        Geometry::Polygon(ref poly) => poly.unsigned_area(),
+        Geometry::MultiPolygon(ref mpoly) => mpoly.unsigned_area(),
+        _ => return (netcdf_data_chunk, txt_data_chunk), // Skip if not a polygon or multipolygon
+    };
+
+    // Get the bounding rectangle of the shape
+    let shape_envelope = match shape_geometry.bounding_rect() {
+        Some(env) => env,
+        None => return (netcdf_data_chunk, txt_data_chunk), // Skip if no bounding rectangle
+    };
+
+    let mut area_all = 0.0;
+    let mut cellid_fraction = Vec::new();
+
+    // Query the R-tree for grid cells intersecting the shape's bounding rectangle
+    let candidate_cells = rtree.locate_in_envelope_intersecting(&AABB::from_corners(
+        [shape_envelope.min().x, shape_envelope.min().y],
+        [shape_envelope.max().x, shape_envelope.max().y],
+    ));
+
+    // Process intersections
+    for grid_cell in candidate_cells {
+        let intersection = calculate_intersection(&grid_cell.polygon, shape_geometry);
+        if let Some(intersection_geom) = intersection {
+            let area_intersect = calculate_area(&intersection_geom);
+            if area_intersect > 0.0 {
+                area_all += area_intersect;
+                let cell_id = grid_cell.ilat * nlon + grid_cell.ilon;
+                let fraction = area_intersect / shape_area;
+                cellid_fraction.push((cell_id, fraction));
+            }
+        }
+    }
+
+    // Calculate error
+    let error = (shape_area - area_all) / shape_area;
+
+    if error.abs() > area_error_threshold && shape_area > 500_000.0 {
+        println!("Error for basin {}: {:.2}%", basin_id, error * 100.0);
+        for (cell_id, fraction) in cellid_fraction {
+            netcdf_data_chunk.push((fraction, cell_id + 1, index + 1));
+            txt_data_chunk.push((basin_id.clone(), cell_id, fraction));
+        }
+    } else {
+        let correction_factor = 1.0 / (1.0 - error);
+        for (cell_id, fraction) in cellid_fraction {
+            let corrected = fraction * correction_factor;
+            netcdf_data_chunk.push((corrected, cell_id + 1, index + 1));
+            txt_data_chunk.push((basin_id.clone(), cell_id, corrected));
+        }
+    }
+
+    (netcdf_data_chunk, txt_data_chunk)
+}
 
 /// Process the shape intersections with grid cells and collect results
 pub fn process_shape_intersections(
@@ -230,55 +298,13 @@ pub fn process_shape_intersections(
 
     // Iterate over the basins and calculate the intersection with grid cells
     for (index, (basin_id, shape_geometry)) in shapes.into_iter().enumerate() {
-        let shape_area = match shape_geometry {
-            Geometry::Polygon(ref poly) => poly.unsigned_area(),
-            Geometry::MultiPolygon(ref mpoly) => mpoly.unsigned_area(),
-            _ => continue, // Skip if not polygon or multipolygon
-        };
-
-        let shape_envelope = shape_geometry.bounding_rect().ok_or("Failed to get bounding rectangle")?;
-        let mut area_all = 0.0;
-        let mut cellid_fraction = Vec::new();
-
-        // Query the R-tree for grid cells intersecting the shape's bounding rectangle
-        let candidate_cells = rtree.locate_in_envelope_intersecting(&AABB::from_corners(
-            [shape_envelope.min().x, shape_envelope.min().y],
-            [shape_envelope.max().x, shape_envelope.max().y],
-        ));
-
-        for grid_cell in candidate_cells {
-            let intersection = calculate_intersection(&grid_cell.polygon, &shape_geometry);
-            if let Some(intersection_geom) = intersection {
-                let area_intersect = calculate_area(&intersection_geom);
-                if area_intersect > 0.0 {
-                    area_all += area_intersect;
-                    let cell_id = grid_cell.ilat * nlon + grid_cell.ilon;
-                    let fraction = area_intersect / shape_area;
-                    cellid_fraction.push((cell_id, fraction));
-                }
-            }
-        }
-
-        // Calculate error
-        let error = (shape_area - area_all) / shape_area;
-
-        // Cloning basin_id shouldn't be too bad since they should be short.
-        if error.abs() > area_error_threshold && shape_area > 500_000.0 {
-            println!("Error for basin {}: {:.2}%", basin_id, error * 100.0);
-            for (cell_id, fraction) in cellid_fraction {
-                netcdf_data.push((fraction, (cell_id + 1), (index + 1)));
-                txt_data.push((basin_id.clone(), cell_id, fraction))
-            }
-        } else {
-            // Adjust such that weights sum up to 1.0
-            let correction_factor = 1.0 / (1.0 - error);
-            for (cell_id, fraction) in cellid_fraction {
-                let corrected = fraction * correction_factor;
-                netcdf_data.push((corrected, (cell_id + 1), (index + 1)));
-                txt_data.push((basin_id.clone(), cell_id, corrected))
-            }
-        }
+        let (netcdf_chunk, txt_chunk) = process_single_shape_intersection(
+            &basin_id, &shape_geometry, &rtree, nlon, area_error_threshold, index,
+        );
+        netcdf_data.extend(netcdf_chunk);
+        txt_data.extend(txt_chunk);
     }
+
     let rvn_data = RvnGridWeights {
         txt_data,
         nsubbasins,
@@ -308,72 +334,13 @@ pub fn parallel_process_shape_intersections(
     let shapes_vec: Vec<(String, Geometry)> = shapes.into_iter().collect();
 
     // Use Rayon to parallelize the loop
-    // Do I truly understand this? Nope.
     let results: Vec<_> = shapes_vec
         .par_iter()
         .enumerate()
         .map(|(index, (basin_id, shape_geometry))| {
-            let mut netcdf_data_chunk = Vec::new();
-            let mut txt_data_chunk = Vec::new();
-
-            // Calculate the area of the shape
-            let shape_area = match shape_geometry {
-                Geometry::Polygon(ref poly) => poly.unsigned_area(),
-                Geometry::MultiPolygon(ref mpoly) => mpoly.unsigned_area(),
-                _ => {
-                    // Skip if not polygon or multipolygon
-                    return (netcdf_data_chunk, txt_data_chunk);
-                }
-            };
-
-            // Get the bounding rectangle of the shape
-            let shape_envelope = match shape_geometry.bounding_rect() {
-                Some(env) => env,
-                None => {
-                    // Cannot get bounding rectangle, skip this geometry
-                    return (netcdf_data_chunk, txt_data_chunk);
-                }
-            };
-
-            let mut area_all = 0.0;
-            let mut cellid_fraction = Vec::new();
-
-            let candidate_cells = rtree.locate_in_envelope_intersecting(&AABB::from_corners(
-                [shape_envelope.min().x, shape_envelope.min().y],
-                [shape_envelope.max().x, shape_envelope.max().y],
-            ));
-
-            for grid_cell in candidate_cells {
-                let intersection = calculate_intersection(&grid_cell.polygon, shape_geometry);
-                if let Some(intersection_geom) = intersection {
-                    let area_intersect = calculate_area(&intersection_geom);
-                    if area_intersect > 0.0 {
-                        area_all += area_intersect;
-                        let cell_id = grid_cell.ilat * nlon + grid_cell.ilon;
-                        let fraction = area_intersect / shape_area;
-                        cellid_fraction.push((cell_id, fraction));
-                    }
-                }
-            }
-
-            let error = (shape_area - area_all) / shape_area;
-
-            if error.abs() > area_error_threshold && shape_area > 500_000.0 {
-                println!("Error for basin {}: {:.2}%", basin_id, error * 100.0);
-                for (cell_id, fraction) in cellid_fraction {
-                    netcdf_data_chunk.push((fraction, cell_id + 1, index + 1));
-                    txt_data_chunk.push((basin_id.clone(), cell_id, fraction));
-                }
-            } else {
-                let correction_factor = 1.0 / (1.0 - error);
-                for (cell_id, fraction) in cellid_fraction {
-                    let corrected = fraction * correction_factor;
-                    netcdf_data_chunk.push((corrected, cell_id + 1, index + 1));
-                    txt_data_chunk.push((basin_id.clone(), cell_id, corrected));
-                }
-            }
-
-            (netcdf_data_chunk, txt_data_chunk)
+            process_single_shape_intersection(
+                basin_id, shape_geometry, &rtree, nlon, area_error_threshold, index,
+            )
         })
         .collect();
 
