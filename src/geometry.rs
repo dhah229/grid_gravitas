@@ -139,6 +139,7 @@ pub fn process_lat_lon(args: &Cli) -> Result<(Array2<f32>, Array2<f32>, usize, u
         create_gridcells_from_centers(&lat_2d, &lon_2d)
     };
     
+    // -1 here because we are going to have 1 polygon between 2 latitudes/longitudes
     let nlat = lath.nrows() - 1;
     let nlon = lonh.ncols() - 1;
 
@@ -363,7 +364,7 @@ pub fn parallel_process_shape_intersections(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::array;
+    use ndarray::{array, Array2};
     use geo::CoordsIter; 
     use crate::cli::Cli;
     use std::path::Path;
@@ -483,4 +484,14 @@ mod tests {
         assert_eq!(lath.shape(), &[81, 121]);
         assert_eq!(lonh.shape(), &[81, 121]);
     }
+
+    #[test]
+    fn test_create_grid_cells() {
+        let lath: Array2<f32> = Array2::from_shape_vec((2, 2), vec![10.0, 20.0, 30.0, 40.0]).unwrap();
+        let lonh: Array2<f32> = Array2::from_shape_vec((2, 2), vec![100.0, 110.0, 120.0, 130.0]).unwrap();
+        let grid_cell_geom = create_grid_cells(1, 1, &lath, &lonh).unwrap();
+        assert_eq!(grid_cell_geom.len(), 1);
+        assert_eq!(grid_cell_geom[0].len(), 1);
+    }
+
 }
