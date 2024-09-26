@@ -120,8 +120,6 @@ pub fn shape_to_geometry(
     }
 
     let mut exterior = LineString::from(coords);
-
-    // Transform the coordinates if necessary
     exterior = exterior
         .try_map_coords(|coord| proj.convert(coord)).expect("Failed to transform coordinates");
 
@@ -129,7 +127,6 @@ pub fn shape_to_geometry(
 
     Ok(polygon)
 }
-
 
 /// Process lat/lon and create grid cells
 pub fn process_lat_lon(args: &Cli) -> Result<(Array2<f32>, Array2<f32>, usize, usize), Box<dyn Error>> {
@@ -368,6 +365,9 @@ mod tests {
     use super::*;
     use ndarray::array;
     use geo::CoordsIter; 
+    use crate::cli::Cli;
+    use std::path::Path;
+    use clap::Parser;
 
     #[test]
     fn test_meshgrid() {
@@ -442,4 +442,45 @@ mod tests {
         assert_eq!(polygon.exterior().coords_count(), 4);
     }
 
+    #[test]
+    fn test_process_lat_lon() {
+        // Test process lat lon with default arguments
+        let path_to_nc = Path::new("example/input_ERA5/era5-crop.nc");
+        let path_to_nc_str = path_to_nc.to_str().unwrap();
+        let path_to_hru = Path::new("example/maps/HRUs_coarse.shp");
+        let path_to_hru_str = path_to_hru.to_str().unwrap();
+        let args = vec![
+            "grid_gravitas",
+            "-n", path_to_nc_str,
+            "-d", "longitude,latitude",
+            "-v", "longitude,latitude",
+            "-s", "custom.shp",
+            "-c", "custom_id",
+            "-o", path_to_hru_str,
+        ];
+        let cli = Cli::parse_from(args);
+        let (lath, lonh, nlat, nlon) = process_lat_lon(&cli).unwrap();
+        assert_eq!(nlat, 81);
+        assert_eq!(nlon, 121);
+        assert_eq!(lath.shape(), &[82, 122]);
+        assert_eq!(lonh.shape(), &[82, 122]);
+
+        // Test process lat lon with grd_bnds set to true
+        let args = vec![
+            "grid_gravitas",
+            "-n", path_to_nc_str,
+            "-d", "longitude,latitude",
+            "-v", "longitude,latitude",
+            "-s", "custom.shp",
+            "-c", "custom_id",
+            "-o", path_to_hru_str,
+            "--grd-bnds",
+        ];
+        let cli = Cli::parse_from(args);
+        let (lath, lonh, nlat, nlon) = process_lat_lon(&cli).unwrap();
+        assert_eq!(nlat, 80);
+        assert_eq!(nlon, 120);
+        assert_eq!(lath.shape(), &[81, 121]);
+        assert_eq!(lonh.shape(), &[81, 121]);
+    }
 }
