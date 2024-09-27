@@ -3,7 +3,6 @@ use geo_types::Geometry as GeoGeometry;
 use ndarray::{Array2, Ix1, Ix2};
 use wkt::Wkt;
 use std::{
-    collections::HashMap,
     convert::TryFrom,
     error::Error,
     path::Path,
@@ -116,12 +115,12 @@ pub fn read_lat_lon(file: &netcdf::File, args: &Cli) -> Result<(ndarray::Array2<
     Ok((lat_final, lon_final))
 }
 
-// Reads shapefile and returns a HashMap of IDs and geometries
+// Reads shapefile and returns a Vec of IDs and geometries
 pub fn read_shapefile(
     path: &Path,
     key_colname: &str,
     target_epsg: &str,
-) -> Result<HashMap<String, GeoGeometry<f64>>, Box<dyn Error>> {
+) -> Result<Vec<(String, GeoGeometry<f64>)>, Box<dyn Error>> {
     // Open the shapefile dataset
     let dataset = GdalDataset::open(path)?;
 
@@ -138,7 +137,7 @@ pub fn read_shapefile(
     // Create a coordinate transformation
     let coord_transform = CoordTransform::new(&source_srs, &target_srs)?;
 
-    let mut geometries = HashMap::new();
+    let mut geometries = Vec::new();
 
     // Iterate over features
     for feature_result in layer.features() {
@@ -173,7 +172,7 @@ pub fn read_shapefile(
                 field_value.into_int().ok_or("Failed to get integer value")?.to_string()
             },
         };
-        geometries.insert(basin_id, geo_geometry);
+        geometries.push((basin_id, geo_geometry));
     }
 
     Ok(geometries)

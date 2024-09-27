@@ -1,7 +1,6 @@
 use std::{
     error::Error,
     path::Path,
-    collections::HashMap,
 };
 
 use geo::{
@@ -281,7 +280,7 @@ pub fn process_shape_intersections(
     nlat: usize, 
     nlon: usize, 
     grid_cell_geom: Vec<Vec<Polygon<f64>>>, 
-    shapes: HashMap<String, Geometry>, 
+    shapes: Vec<(String, Geometry)>, 
 ) -> Result<(Vec<(f64, usize, usize)>, RvnGridWeights), Box<dyn Error>> {
     let nsubbasins = shapes.len() as i32;
     let ncells = (nlat * nlon) as i32;
@@ -317,7 +316,7 @@ pub fn parallel_process_shape_intersections(
     nlat: usize,
     nlon: usize,
     grid_cell_geom: Vec<Vec<Polygon<f64>>>,
-    shapes: HashMap<String, Geometry>,
+    shapes: Vec<(String, Geometry)>,
 ) -> Result<(Vec<(f64, usize, usize)>, RvnGridWeights), Box<dyn Error>> {
     let nsubbasins = shapes.len() as i32;
     let ncells = (nlat * nlon) as i32;
@@ -328,11 +327,8 @@ pub fn parallel_process_shape_intersections(
     // Build the R-tree from grid cells
     let rtree = build_grid_rtree(grid_cell_geom);
 
-    // Convert the HashMap into a Vec to use par_iter().enumerate()
-    let shapes_vec: Vec<(String, Geometry)> = shapes.into_iter().collect();
-
     // Use Rayon to parallelize the loop
-    let results: Vec<_> = shapes_vec
+    let results: Vec<_> = shapes
         .par_iter()
         .enumerate()
         .map(|(index, (basin_id, shape_geometry))| {
