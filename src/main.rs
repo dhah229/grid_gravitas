@@ -20,8 +20,13 @@ use geometry::{
 };
 use cli::Cli;
 
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Cli::parse();
+    run_with_args(args)
+}
+
+fn run_with_args(args: Cli) -> Result<(), Box<dyn Error>> {
     // Make grid of latitudes and longitudes
     let (lath, lonh, nlat, nlon) = process_lat_lon(&args)?;
 
@@ -56,4 +61,146 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::NamedTempFile;
+    use std::fs::File;
+    use std::io::BufRead;
+
+    #[test]
+    fn test_e2e_series_nc() {
+        // Test E2E
+        let temp_file = NamedTempFile::new().expect("Failed to create temporary file");
+        let temp_path = temp_file.path().to_path_buf();
+        let temp_path_str = temp_path.to_str().unwrap();
+        let path_to_nc = Path::new("example/input_ERA5/era5-crop.nc");
+        let path_to_nc_str = path_to_nc.to_str().unwrap();
+        let path_to_hru = Path::new("example/maps/HRUs_coarse.shp");
+        let path_to_hru_str = path_to_hru.to_str().unwrap();
+        let args = Cli {
+            nc: path_to_nc_str.to_string(),
+            dimname: vec!["longitude".to_string(), "latitude".to_string()],
+            varname: vec!["longitude".to_string(), "latitude".to_string()],
+            shp: path_to_hru_str.to_string(),
+            col: "HRU_ID".to_string(),
+            grd_bnds: false,
+            out: temp_path_str.to_string(),
+            rv_out: false,
+            parallel: false,
+        };
+        run_with_args(args).expect("Failed to run with args");
+
+        let nc_file = netcdf::open(temp_path).expect("Failed to open netcdf file");
+        let dim = nc_file.dimension("n_s").expect("Dimension not found");
+        assert_eq!(dim.len(), 123);
+    }
+
+    #[test]
+    fn test_e2e_parallel_nc() {
+        // Test E2E
+        let temp_file = NamedTempFile::new().expect("Failed to create temporary file");
+        let temp_path = temp_file.path().to_path_buf();
+        let temp_path_str = temp_path.to_str().unwrap();
+        let path_to_nc = Path::new("example/input_ERA5/era5-crop.nc");
+        let path_to_nc_str = path_to_nc.to_str().unwrap();
+        let path_to_hru = Path::new("example/maps/HRUs_coarse.shp");
+        let path_to_hru_str = path_to_hru.to_str().unwrap();
+        let args = Cli {
+            nc: path_to_nc_str.to_string(),
+            dimname: vec!["longitude".to_string(), "latitude".to_string()],
+            varname: vec!["longitude".to_string(), "latitude".to_string()],
+            shp: path_to_hru_str.to_string(),
+            col: "HRU_ID".to_string(),
+            grd_bnds: false,
+            out: temp_path_str.to_string(),
+            rv_out: false,
+            parallel: true,
+        };
+        run_with_args(args).expect("Failed to run with args");
+
+        let nc_file = netcdf::open(temp_path).expect("Failed to open netcdf file");
+        let dim = nc_file.dimension("n_s").expect("Dimension not found");
+        assert_eq!(dim.len(), 123);
+    }
+
+
+    #[test]
+    fn test_e2e_series_rv() {
+        // Test E2E
+        let temp_file = NamedTempFile::new().expect("Failed to create temporary file");
+        let temp_path = temp_file.path().to_path_buf();
+        let temp_path_str = temp_path.to_str().unwrap();
+        let path_to_nc = Path::new("example/input_ERA5/era5-crop.nc");
+        let path_to_nc_str = path_to_nc.to_str().unwrap();
+        let path_to_hru = Path::new("example/maps/HRUs_coarse.shp");
+        let path_to_hru_str = path_to_hru.to_str().unwrap();
+        let args = Cli {
+            nc: path_to_nc_str.to_string(),
+            dimname: vec!["longitude".to_string(), "latitude".to_string()],
+            varname: vec!["longitude".to_string(), "latitude".to_string()],
+            shp: path_to_hru_str.to_string(),
+            col: "HRU_ID".to_string(),
+            grd_bnds: false,
+            out: temp_path_str.to_string(),
+            rv_out: true,
+            parallel: false,
+        };
+        run_with_args(args).expect("Failed to run with args");
+
+        let output_file = File::open(&temp_path).expect("Failed to open temporary file");
+        let reader = std::io::BufReader::new(output_file);
+        let lines: Vec<String> = reader.lines().map(|l| l.unwrap()).collect();
+        let lines_trimmed: Vec<String> = lines.iter().map(|l| l.trim().to_string()).collect();
+
+        // Check that the number of HRUs is 51 and the number of grid cells is 9801
+        let hru_line = lines_trimmed.iter().find(|line| line.contains("NumberHRUs") && line.contains("51"));
+        let grid_cells_line = lines_trimmed.iter().find(|line| line.contains("NumberGridCells") && line.contains("9801"));
+
+        assert!(hru_line.is_some(), "NumberHRUs line not found or value does not match");
+        assert!(grid_cells_line.is_some(), "NumberGridCells line not found or value does not match");
+
+
+    }
+
+    #[test]
+    fn test_e2e_parallel_rv() {
+        // Test E2E
+        let temp_file = NamedTempFile::new().expect("Failed to create temporary file");
+        let temp_path = temp_file.path().to_path_buf();
+        let temp_path_str = temp_path.to_str().unwrap();
+        let path_to_nc = Path::new("example/input_ERA5/era5-crop.nc");
+        let path_to_nc_str = path_to_nc.to_str().unwrap();
+        let path_to_hru = Path::new("example/maps/HRUs_coarse.shp");
+        let path_to_hru_str = path_to_hru.to_str().unwrap();
+        let args = Cli {
+            nc: path_to_nc_str.to_string(),
+            dimname: vec!["longitude".to_string(), "latitude".to_string()],
+            varname: vec!["longitude".to_string(), "latitude".to_string()],
+            shp: path_to_hru_str.to_string(),
+            col: "HRU_ID".to_string(),
+            grd_bnds: false,
+            out: temp_path_str.to_string(),
+            rv_out: true,
+            parallel: true,
+        };
+        run_with_args(args).expect("Failed to run with args");
+
+        let output_file = File::open(&temp_path).expect("Failed to open temporary file");
+        let reader = std::io::BufReader::new(output_file);
+        let lines: Vec<String> = reader.lines().map(|l| l.unwrap()).collect();
+        let lines_trimmed: Vec<String> = lines.iter().map(|l| l.trim().to_string()).collect();
+
+        // Check that the number of HRUs is 51 and the number of grid cells is 9801
+        let hru_line = lines_trimmed.iter().find(|line| line.contains("NumberHRUs") && line.contains("51"));
+        let grid_cells_line = lines_trimmed.iter().find(|line| line.contains("NumberGridCells") && line.contains("9801"));
+
+        assert!(hru_line.is_some(), "NumberHRUs line not found or value does not match");
+        assert!(grid_cells_line.is_some(), "NumberGridCells line not found or value does not match");
+
+
+    }
+    
+}
 

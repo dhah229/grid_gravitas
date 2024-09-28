@@ -241,10 +241,20 @@ pub fn write_txt_output(output_path: &Path, rvn_data: &mut RvnGridWeights) -> Re
 
 
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;
+    use tempfile::NamedTempFile;
+    use std::io::BufRead;
+
+    fn path_to_string(path: &Path) -> String {
+        path.to_str()
+            .expect("Path is not valid UTF-8")
+            .to_string()
+    }
+    
 
     #[test]
     fn test_read_shapefile_valid() {
@@ -273,14 +283,17 @@ mod tests {
     }
 
     #[test]
-    fn test_read_lat_lon_valid() {
-        let path = Path::new("example/input_ERA5/era5-crop.nc");
-        let file = netcdf::open(path).unwrap();
+    fn test_read_lat_lon_1d() {
+        let nc_path = Path::new("example/input_ERA5/era5-crop.nc");
+        let nc_path_string = path_to_string(nc_path);
+        let shp_path = Path::new("example/maps/HRUs_coarse.shp");
+        let shp_path_string = path_to_string(shp_path);
+        let file = netcdf::open(nc_path).unwrap();
         let args = Cli {
-            nc: "example/input_ERA5/era5-crop.nc".to_string(),
+            nc: nc_path_string,
             dimname: vec!["longitude".to_string(), "latitude".to_string()],
             varname: vec!["longitude".to_string(), "latitude".to_string()],
-            shp: "example/maps/HRUs_coarse.shp".to_string(),
+            shp: shp_path_string,
             col: "HRU_ID".to_string(),
             out: "output.nc".to_string(),
             rv_out: false,
@@ -292,6 +305,72 @@ mod tests {
         let (lat, lon) = result.unwrap();
         assert_eq!(lat.shape(), [81,121]);
         assert_eq!(lon.shape(), [81,121]);
+    }
 
+    #[test]
+    fn test_read_lat_lon_2d() {
+        let nc_path = Path::new("example/input_VIC/VIC_streaminputs.nc");
+        let nc_path_string = path_to_string(nc_path);
+        let shp_path = Path::new("example/maps/HRUs_coarse.shp");
+        let shp_path_string = path_to_string(shp_path);
+        let file = netcdf::open(nc_path).unwrap();
+        let args = Cli {
+            nc: nc_path_string,
+            dimname: vec!["lon".to_string(), "lat".to_string()],
+            varname: vec!["lon".to_string(), "lat".to_string()],
+            shp: shp_path_string,
+            col: "HRU_ID".to_string(),
+            out: "output.nc".to_string(),
+            rv_out: false,
+            grd_bnds: false,
+            parallel: false,
+        };
+        let result = read_lat_lon(&file, &args);
+        assert!(result.is_ok());
+        let (lat, lon) = result.unwrap();
+        assert_eq!(lat.shape(), [10,10]);
+        assert_eq!(lon.shape(), [10,10]);
+    }
+
+    #[test]
+    fn test_write_netcdf_output() {
+        let temp_file = NamedTempFile::new().expect("Failed to create temporary file");
+        let temp_path = temp_file.path().to_path_buf();
+        let netcdf_data = vec![(1.0, 1, 1), (2.0, 2, 2), (3.0, 3, 3)];
+        write_netcdf_output(&temp_path, &netcdf_data).expect("Failed to write NetCDF output");
+        let nc_file = netcdf::open(&temp_path).expect("Failed to open temporary NetCDF file");
+        // Check dimension size
+        let dim = nc_file.dimension("n_s").expect("Dimension not found");
+        assert_eq!(dim.len(), netcdf_data.len());
+    }
+
+    #[test]
+    fn test_write_rvn_output() {
+        let temp_file = NamedTempFile::new().expect("Failed to create temporary file");
+        let temp_path = temp_file.path().to_path_buf();
+        let mut rvn_data = RvnGridWeights {
+            nsubbasins: 3,
+            ncells: 3,
+            txt_data: vec![
+                ("1".to_string(), 1, 1.0),
+                ("2".to_string(), 2, 2.0),
+                ("3".to_string(), 3, 3.0),
+            ],
+        };
+        write_txt_output(&temp_path, &mut rvn_data).expect("Failed to write RVN output");
+        let output_file = File::open(&temp_path).expect("Failed to open temporary file");
+        let reader = std::io::BufReader::new(output_file);
+        let lines: Vec<String> = reader.lines().map(|l| l.unwrap()).collect();
+        assert_eq!(lines[0], ":GridWeights");
+        assert_eq!(lines[1], "   #");
+        assert_eq!(lines[2], "   # [# HRUs]");
+        assert_eq!(lines[3], "   :NumberHRUs       3");
+        assert_eq!(lines[4], "   :NumberGridCells  3");
+        assert_eq!(lines[5], "   #");
+        assert_eq!(lines[6], "   # [HRU ID] [Cell #] [w_kl]");
+        assert_eq!(lines[7], "   1   1   1");
+        assert_eq!(lines[8], "   2   2   2");
+        assert_eq!(lines[9], "   3   3   3");
+        assert_eq!(lines[10], ":EndGridWeights");
     }
 }

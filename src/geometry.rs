@@ -361,10 +361,18 @@ pub fn parallel_process_shape_intersections(
 mod tests {
     use super::*;
     use ndarray::{array, Array2};
-    use geo::CoordsIter; 
+    use geo::{
+        CoordsIter, 
+        Geometry, 
+        polygon, 
+        Polygon, 
+        algorithm::contains::Contains, 
+        algorithm::centroid::Centroid
+    }; 
     use crate::cli::Cli;
     use std::path::Path;
     use clap::Parser;
+    use rstar::RTree;
 
     #[test]
     fn test_meshgrid() {
@@ -488,6 +496,418 @@ mod tests {
         let grid_cell_geom = create_grid_cells(1, 1, &lath, &lonh).unwrap();
         assert_eq!(grid_cell_geom.len(), 1);
         assert_eq!(grid_cell_geom[0].len(), 1);
+    }
+
+    #[test]
+    fn test_intersection_with_polygon_overlap() {
+        // Test when there is overlap between the grid cell and the shape
+        // Create a Polygon without interior rings
+        let grid_cell: Polygon<f64> = polygon![
+            (x: 0.0, y: 0.0),
+            (x: 0.0, y: 10.0),
+            (x: 10.0, y: 10.0),
+            (x: 10.0, y: 0.0),
+            (x: 0.0, y: 0.0),
+        ];
+        let shape_polygon: Polygon<f64> = polygon![
+            (x: 5.0, y: 5.0),
+            (x: 5.0, y: 15.0),
+            (x: 15.0, y: 15.0),
+            (x: 15.0, y: 5.0),
+            (x: 5.0, y: 5.0),
+        ];
+
+        // Cast Polygon into Geometry to satisfy the calculate_intersection function
+        let shape_geometry = Geometry::Polygon(shape_polygon);
+        let intersection = calculate_intersection(&grid_cell, &shape_geometry);
+        assert!(intersection.is_some());
+
+        // Destructure the intersection to get the MultiPolygon
+        // Probably better to check equality of Polygons, but couldn't find it
+        if let Some(Geometry::MultiPolygon(mpoly)) = intersection {
+            assert_eq!(mpoly.0.len(), 1); // Only one intersecting polygon
+            let intersected_polygon = &mpoly.0[0];
+            // The intersected polygon should have coordinates from (5,5) to (10,10)
+            let expected_polygon = polygon![
+                (x: 5.0, y: 5.0),
+                (x: 5.0, y: 10.0),
+                (x: 10.0, y: 10.0),
+                (x: 10.0, y: 5.0),
+                (x: 5.0, y: 5.0),
+            ];
+            assert!(intersected_polygon.contains(&expected_polygon));
+            let centroid_a = intersected_polygon.centroid().unwrap();
+            let centroid_b = expected_polygon.centroid().unwrap();
+            assert_eq!(centroid_a, centroid_b);
+        } else {
+            panic!("Expected a MultiPolygon geometry");
+        }
+    }
+
+    #[test]
+    fn test_intersection_with_polygon_nooverlap() {
+        // Test when there is no overlap between the grid cell and the shape
+        let grid_cell: Polygon<f64> = polygon![
+            (x: 0.0, y: 0.0),
+            (x: 0.0, y: 10.0),
+            (x: 10.0, y: 10.0),
+            (x: 10.0, y: 0.0),
+            (x: 0.0, y: 0.0),
+        ];
+        let shape_polygon: Polygon<f64> = polygon![
+            (x: 15.0, y: 15.0),
+            (x: 15.0, y: 20.0),
+            (x: 20.0, y: 20.0),
+            (x: 20.0, y: 15.0),
+            (x: 15.0, y: 15.0),
+        ];
+        let shape_geometry = Geometry::Polygon(shape_polygon);
+        let intersection = calculate_intersection(&grid_cell, &shape_geometry);
+        assert!(intersection.is_none());
+    }
+
+    #[test]
+    fn test_intersection_with_polygon_touching_edge() {
+        // Test when we touch corners of the grid cell
+        let grid_cell: Polygon<f64> = polygon![
+            (x: 0.0, y: 0.0),
+            (x: 0.0, y: 10.0),
+            (x: 10.0, y: 10.0),
+            (x: 10.0, y: 0.0),
+            (x: 0.0, y: 0.0),
+        ];
+        let shape_polygon: Polygon<f64> = polygon![
+            (x: 10.0, y: 0.0),
+            (x: 10.0, y: 10.0),
+            (x: 20.0, y: 10.0),
+            (x: 20.0, y: 0.0),
+            (x: 10.0, y: 0.0),
+        ];
+        let shape_geometry = Geometry::Polygon(shape_polygon);
+        let intersection = calculate_intersection(&grid_cell, &shape_geometry);
+        assert!(intersection.is_none());
+    }
+
+    #[test]
+    fn test_intersection_with_non_polygon_geometry() {
+
+        let grid_cell: Polygon<f64> = polygon![
+            (x: 0.0, y: 0.0),
+            (x: 0.0, y: 10.0),
+            (x: 10.0, y: 10.0),
+            (x: 10.0, y: 0.0),
+            (x: 0.0, y: 0.0),
+        ];
+        let line = geo::LineString::from(vec![
+            geo::Coord { x: 5.0, y: 5.0 },
+            geo::Coord { x: 15.0, y: 15.0 },
+        ]);
+        let line_geometry = Geometry::LineString(line);
+        let intersection = calculate_intersection(&grid_cell, &line_geometry);
+        assert!(intersection.is_none());
+    }
+
+    #[test]
+    fn test_intersection_with_multipolygon_overlap() {
+        let grid_cell: Polygon<f64> = polygon![
+            (x: 0.0, y: 0.0),
+            (x: 0.0, y: 10.0),
+            (x: 10.0, y: 10.0),
+            (x: 10.0, y: 0.0),
+            (x: 0.0, y: 0.0),
+        ];
+        let shape_polygon1: Polygon<f64> = polygon![
+            (x: 5.0, y: 5.0),
+            (x: 5.0, y: 15.0),
+            (x: 15.0, y: 15.0),
+            (x: 15.0, y: 5.0),
+            (x: 5.0, y: 5.0),
+        ];
+        let shape_polygon2: Polygon<f64> = polygon![
+            (x: 15.0, y: 5.0),
+            (x: 15.0, y: 15.0),
+            (x: 25.0, y: 15.0),
+            (x: 25.0, y: 5.0),
+            (x: 15.0, y: 5.0),
+        ];
+        let shape_multipolygon = Geometry::MultiPolygon(MultiPolygon(vec![shape_polygon1, shape_polygon2]));
+        let intersection = calculate_intersection(&grid_cell, &shape_multipolygon);
+        assert!(intersection.is_some());
+        if let Some(Geometry::MultiPolygon(mpoly)) = intersection {
+            assert_eq!(mpoly.0.len(), 1);
+            let intersected_polygon = &mpoly.0[0];
+            let expected_polygon = polygon![
+                (x: 5.0, y: 5.0),
+                (x: 5.0, y: 10.0),
+                (x: 10.0, y: 10.0),
+                (x: 10.0, y: 5.0),
+                (x: 5.0, y: 5.0),
+            ];
+            assert!(intersected_polygon.contains(&expected_polygon));
+        } else {
+            panic!("Expected a MultiPolygon geometry");
+        }
+    }
+
+    #[test]
+    fn test_intersection_with_multipolygon_no_overlap() {
+        let grid_cell: Polygon<f64> = polygon![
+            (x: 0.0, y: 0.0),
+            (x: 0.0, y: 10.0),
+            (x: 10.0, y: 10.0),
+            (x: 10.0, y: 0.0),
+            (x: 0.0, y: 0.0),
+        ];
+        let shape_polygon1: Polygon<f64> = polygon![
+            (x: 15.0, y: 15.0),
+            (x: 15.0, y: 20.0),
+            (x: 20.0, y: 20.0),
+            (x: 20.0, y: 15.0),
+            (x: 15.0, y: 15.0),
+        ];
+        let shape_polygon2: Polygon<f64> = polygon![
+            (x: 25.0, y: 15.0),
+            (x: 25.0, y: 20.0),
+            (x: 30.0, y: 20.0),
+            (x: 30.0, y: 15.0),
+            (x: 25.0, y: 15.0),
+        ];
+        let shape_multipolygon = Geometry::MultiPolygon(MultiPolygon(vec![shape_polygon1, shape_polygon2]));
+        let intersection = calculate_intersection(&grid_cell, &shape_multipolygon);
+        assert!(intersection.is_none());
+    }
+
+    #[test]
+    fn test_calculate_area_with_polygon() {
+        let polygon: Polygon<f64> = polygon![
+            (x: 0.0, y: 0.0),
+            (x: 0.0, y: 10.0),
+            (x: 10.0, y: 10.0),
+            (x: 10.0, y: 0.0),
+            (x: 0.0, y: 0.0),
+        ];
+        let geometry = Geometry::Polygon(polygon);
+        let area = calculate_area(&geometry);
+        assert_eq!(area, 100.0);
+    }
+
+    #[test]
+    fn test_calculate_area_with_multipolygon() {
+        let polygon1: Polygon<f64> = polygon![
+            (x: 0.0, y: 0.0),
+            (x: 0.0, y: 10.0),
+            (x: 10.0, y: 10.0),
+            (x: 10.0, y: 0.0),
+            (x: 0.0, y: 0.0),
+        ];
+        let polygon2: Polygon<f64> = polygon![
+            (x: 10.0, y: 0.0),
+            (x: 10.0, y: 10.0),
+            (x: 20.0, y: 10.0),
+            (x: 20.0, y: 0.0),
+            (x: 10.0, y: 0.0),
+        ];
+        let multipolygon = MultiPolygon(vec![polygon1, polygon2]);
+        let geometry = Geometry::MultiPolygon(multipolygon);
+        let area = calculate_area(&geometry);
+        assert_eq!(area, 200.0);
+    }
+
+    #[test]
+    fn test_calculate_area_with_non_polygon() {
+        let line = geo::LineString::from(vec![
+            geo::Coord { x: 5.0, y: 5.0 },
+            geo::Coord { x: 15.0, y: 15.0 },
+        ]);
+        let line_geometry = Geometry::LineString(line);
+        let area = calculate_area(&line_geometry);
+        assert_eq!(area, 0.0);
+    }
+
+    #[test]
+    fn test_single_polygon_intersection_fully_contained() {
+        // Basin polygon simple square
+        let shape_polygon: Polygon<f64> = polygon![
+            (x: 0.0, y: 0.0),
+            (x: 0.0, y: 2.0),
+            (x: 2.0, y: 2.0),
+            (x: 2.0, y: 0.0),
+            (x: 0.0, y: 0.0)
+        ];
+        let shape_geometry = Geometry::Polygon(shape_polygon.clone());
+        // Single grid cell that fully contains the basin
+        let grid_cell_polygon: Polygon<f64> = polygon![
+            (x: 0.0, y: 0.0),
+            (x: 0.0, y: 4.0),
+            (x: 4.0, y: 4.0),
+            (x: 4.0, y: 0.0),
+            (x: 0.0, y: 0.0)
+        ];
+        let grid_cell = GridCell {
+            ilat: 0,
+            ilon: 0,
+            polygon: grid_cell_polygon.clone(),
+        };
+        
+        // Building required RTree
+        let rtree = RTree::bulk_load(vec![grid_cell]);
+        let basin_id = String::from("test_basin");
+        let nlon = 1;
+        let area_error_threshold = 0.01;
+        let index = 0;
+
+        let (netcdf_data_chunk, txt_data_chunk) = process_single_shape_intersection(
+            &basin_id,
+            &shape_geometry,
+            &rtree,
+            nlon,
+            area_error_threshold,
+            index,
+        );
+        assert!(!netcdf_data_chunk.is_empty(), "NetCDF data chunk should not be empty");
+        assert!(!txt_data_chunk.is_empty(), "TXT data chunk should not be empty");
+
+        // Check expected fraction. This should be fully contained in the grid cell
+        let expected_fraction = 1.0;
+        assert_eq!(netcdf_data_chunk[0].0, expected_fraction);
+        assert_eq!(txt_data_chunk[0].2, expected_fraction);
+
+    }
+
+    #[test]
+    fn test_single_polygon_intersection_partial_contained() {
+        // Test with two grid cells each containing half of the basin
+        let shape_polygon: Polygon<f64> = polygon![
+            (x: 1.0, y: 0.0),
+            (x: 1.0, y: 2.0),
+            (x: 3.0, y: 2.0),
+            (x: 3.0, y: 0.0),
+            (x: 1.0, y: 0.0)
+        ];
+        let shape_geometry = Geometry::Polygon(shape_polygon.clone());
+        // Two grid cells 
+        let grid_cell_polygon1: Polygon<f64> = polygon![
+            (x: 0.0, y: 0.0),
+            (x: 0.0, y: 2.0),
+            (x: 2.0, y: 2.0),
+            (x: 2.0, y: 0.0),
+            (x: 0.0, y: 0.0)
+        ];
+        let grid_cell_polygon2: Polygon<f64> = polygon![
+            (x: 2.0, y: 0.0),
+            (x: 2.0, y: 2.0),
+            (x: 4.0, y: 2.0),
+            (x: 4.0, y: 0.0),
+            (x: 2.0, y: 0.0)
+        ];
+        let grid_cell1 = GridCell {
+            ilat: 0,
+            ilon: 0,
+            polygon: grid_cell_polygon1.clone(),
+        };
+        let grid_cell2 = GridCell {
+            ilat: 0,
+            ilon: 1,
+            polygon: grid_cell_polygon2.clone(),
+        };
+        let rtree = RTree::bulk_load(vec![grid_cell1, grid_cell2]);
+        let basin_id = String::from("test_basin");
+        let nlon = 2;
+        let area_error_threshold = 0.01;
+        let index = 0;
+        let (netcdf_data_chunk, txt_data_chunk) = process_single_shape_intersection(
+            &basin_id,
+            &shape_geometry,
+            &rtree,
+            nlon,
+            area_error_threshold,
+            index,
+        );
+        assert!(!netcdf_data_chunk.is_empty(), "NetCDF data chunk should not be empty");
+        assert!(!txt_data_chunk.is_empty(), "TXT data chunk should not be empty");
+
+        // Check expected fraction for each grid cell
+        let expected_fraction = 0.5;
+        assert_eq!(netcdf_data_chunk[0].0, expected_fraction);
+        assert_eq!(netcdf_data_chunk[1].0, expected_fraction);
+        assert_eq!(txt_data_chunk[0].2, expected_fraction);
+        assert_eq!(txt_data_chunk[1].2, expected_fraction);
+    }
+
+    #[test]
+    fn test_process_shape_intersections() {
+        // Test with two grid cells each containing half of the basin
+        let shape_polygon: Polygon<f64> = polygon![
+            (x: 1.0, y: 0.0),
+            (x: 1.0, y: 2.0),
+            (x: 3.0, y: 2.0),
+            (x: 3.0, y: 0.0),
+            (x: 1.0, y: 0.0)
+        ];
+        let shape_geometry = Geometry::Polygon(shape_polygon.clone());
+        // Two grid cells 
+        let grid_cell_polygon1: Polygon<f64> = polygon![
+            (x: 0.0, y: 0.0),
+            (x: 0.0, y: 2.0),
+            (x: 2.0, y: 2.0),
+            (x: 2.0, y: 0.0),
+            (x: 0.0, y: 0.0)
+        ];
+        let grid_cell_polygon2: Polygon<f64> = polygon![
+            (x: 2.0, y: 0.0),
+            (x: 2.0, y: 2.0),
+            (x: 4.0, y: 2.0),
+            (x: 4.0, y: 0.0),
+            (x: 2.0, y: 0.0)
+        ];
+        let grid_cell_geom = vec![vec![grid_cell_polygon1.clone(), grid_cell_polygon2.clone()]];
+        let shapes = vec![("test_basin".to_string(), shape_geometry)];
+        let nlat = 1;
+        let nlon = 2;
+        let (netcdf_data, rvn_data) = process_shape_intersections(nlat, nlon, grid_cell_geom, shapes).unwrap();
+        let expected_fraction = 0.5;
+        assert_eq!(netcdf_data[0].0, expected_fraction);
+        assert_eq!(netcdf_data[1].0, expected_fraction);
+        assert_eq!(rvn_data.txt_data[0].2, expected_fraction);
+        assert_eq!(rvn_data.txt_data[1].2, expected_fraction);
+    }
+
+    #[test]
+    fn test_parallel_process_shape_intersections() {
+        // Test with two grid cells each containing half of the basin
+        let shape_polygon: Polygon<f64> = polygon![
+            (x: 1.0, y: 0.0),
+            (x: 1.0, y: 2.0),
+            (x: 3.0, y: 2.0),
+            (x: 3.0, y: 0.0),
+            (x: 1.0, y: 0.0)
+        ];
+        let shape_geometry = Geometry::Polygon(shape_polygon.clone());
+        // Two grid cells 
+        let grid_cell_polygon1: Polygon<f64> = polygon![
+            (x: 0.0, y: 0.0),
+            (x: 0.0, y: 2.0),
+            (x: 2.0, y: 2.0),
+            (x: 2.0, y: 0.0),
+            (x: 0.0, y: 0.0)
+        ];
+        let grid_cell_polygon2: Polygon<f64> = polygon![
+            (x: 2.0, y: 0.0),
+            (x: 2.0, y: 2.0),
+            (x: 4.0, y: 2.0),
+            (x: 4.0, y: 0.0),
+            (x: 2.0, y: 0.0)
+        ];
+        let grid_cell_geom = vec![vec![grid_cell_polygon1.clone(), grid_cell_polygon2.clone()]];
+        let shapes = vec![("test_basin".to_string(), shape_geometry)];
+        let nlat = 1;
+        let nlon = 2;
+        let (netcdf_data, rvn_data) = parallel_process_shape_intersections(nlat, nlon, grid_cell_geom, shapes).unwrap();
+        let expected_fraction = 0.5;
+        assert_eq!(netcdf_data[0].0, expected_fraction);
+        assert_eq!(netcdf_data[1].0, expected_fraction);
+        assert_eq!(rvn_data.txt_data[0].2, expected_fraction);
+        assert_eq!(rvn_data.txt_data[1].2, expected_fraction);
     }
 
 }
