@@ -1,3 +1,3 @@
-cargo run -- --nc example/input_ERA5/era5-crop.nc --dimname longitude,latitude --varname longitude,latitude  --shp example/maps/HRUs_coarse.shp --col HRU_ID --out output.nc
-cargo run -- --nc example/input_VIC/VIC_streaminputs.nc --dimname lon,lat --varname lon,lat  --shp example/maps/HRUs_coarse.shp --col HRU_ID --out output.nc
-cargo run -- --nc example/input_MESH/RFF_H_GRD.nc --dimname rlon,rlat --varname longitude,latitude --shp example/maps/HRUs_coarse.shp --col HRU_ID --out output.nc
+cargo run -- --nc example/input_ERA5/era5-crop.nc --dimname longitude,latitude --varname longitude,latitude  --shp example/maps/HRUs_coarse.shp --col HRU_ID --out output.txt --rv-out
+cargo run -- --nc example/input_VIC/VIC_streaminputs.nc --dimname lon,lat --varname lon,lat  --shp example/maps/HRUs_coarse.shp --col HRU_ID --out output.txt --rv-out
+cargo run -- --nc example/input_MESH/RFF_H_GRD.nc --dimname rlon,rlat --varname longitude,latitude --shp example/maps/HRUs_coarse.shp --col HRU_ID --out output.txt --rv-out

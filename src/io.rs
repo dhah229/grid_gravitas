@@ -59,6 +59,7 @@ pub fn read_lat_lon(file: &netcdf::File, args: &Cli) -> Result<(ndarray::Array2<
     // Check if the dimensions are 1D
     match lat_dims.len() {
         1 => {
+            // If the dimensions are 1D, convert to 2D using meshgrid
             let lat = lat_var
                 .get::<f32, _>(..)?
                 .into_dimensionality::<Ix1>()
@@ -73,6 +74,7 @@ pub fn read_lat_lon(file: &netcdf::File, args: &Cli) -> Result<(ndarray::Array2<
             lon_final = lon_2d;
         },
         2 => {
+            // If the dimensions are 2D, extract the data and transpose if necessary
             // [      1      2      3   ...     1*nlon
             //   nlon+1 nlon+2 nlon+3   ...     2*nlon
             //      ...    ...    ...   ...     ...
@@ -186,13 +188,16 @@ pub fn write_netcdf_output(file_path: &Path, netcdf_data: &Vec<(f64, usize, usiz
     let col_usize: Vec<usize> = netcdf_data.iter().map(|(_, col, _)| *col).collect();
     let row_usize: Vec<usize> = netcdf_data.iter().map(|(_, _, row)| *row).collect();
 
+    // Convert the vectors to the correct data types
     let s: Vec<f32> = s_f64.iter().map(|&x| x as f32).collect();
     let col: Vec<i32> = col_usize.iter().map(|&x| x as i32).collect();
     let row: Vec<i32> = row_usize.iter().map(|&x| x as i32).collect();
 
+    // Create the netCDF file
     let mut nc_out = netcdf::create(file_path)?;
     nc_out.add_dimension("n_s", s.len())?;
     
+    // Add the variables to the netCDF file
     let mut s_var = nc_out.add_variable::<f32>("S", &["n_s"])?;
     s_var.put_values(&s, ..)?;
     
@@ -214,6 +219,8 @@ pub fn write_txt_output(output_path: &Path, rvn_data: &mut RvnGridWeights) -> Re
         let b_id: i32 = b.0.parse().expect("Failed to parse basin_id to i32");
         a_id.cmp(&b_id)
     });
+
+    // Create the output file
     let output_file = File::create(output_path)?;
     let mut writer = BufWriter::new(output_file);
     writeln!(writer, ":GridWeights")?;
