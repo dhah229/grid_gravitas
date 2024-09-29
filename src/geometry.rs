@@ -21,7 +21,7 @@ use rayon::prelude::*;
 use ndarray::{s, Array, Array2, Zip};
 use proj::Proj;
 
-use crate::utils::RvnGridWeights;
+use crate::utils::{RvnGridWeights, AREA_THRESHOLD};
 use crate::io::read_lat_lon;
 use crate::cli::Cli;
 use crate::rtree::{build_grid_rtree, GridCell};
@@ -288,7 +288,7 @@ pub fn process_shape_intersections(
     let mut txt_data = Vec::new();
 
     // 5 percent area error threshold. Is 5 percent enough?
-    let area_error_threshold = 0.05;
+    let area_error_threshold = AREA_THRESHOLD;
 
     // Build the R-tree from grid cells
     let rtree = build_grid_rtree(grid_cell_geom);
@@ -322,7 +322,7 @@ pub fn parallel_process_shape_intersections(
     let ncells = (nlat * nlon) as i32;
 
     // 5 percent area error threshold
-    let area_error_threshold = 0.05;
+    let area_error_threshold = AREA_THRESHOLD;
 
     // Build the R-tree from grid cells
     let rtree = build_grid_rtree(grid_cell_geom);

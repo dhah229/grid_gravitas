@@ -1,5 +1,9 @@
 use ndarray::Array2;
 
+/// Area threshold to determine the error of the area
+pub const AREA_THRESHOLD: f64 = 0.05;
+
+/// Struct to hold the Raven grid weights
 #[derive(Debug)]
 pub struct RvnGridWeights {
     pub txt_data: Vec<(String, usize, f64)>,
