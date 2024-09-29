@@ -17,7 +17,7 @@ use gdal::{
     vector::OGRFieldType,
 };
 
-use crate::utils::{dims_match, dims_match_reversed, RvnGridWeights};
+use crate::utils::{dims_match, dims_match_reversed, RvnGridWeights, is_valid_lat, is_valid_lon};
 use crate::geometry::meshgrid;
 use crate::cli::Cli;
 
@@ -114,6 +114,10 @@ pub fn read_lat_lon(file: &netcdf::File, args: &Cli) -> Result<(ndarray::Array2<
             return Err("Coordinate variables must have the same number of dimensions (either 1 or 2)".into());
         }
     }
+
+    // Check if the latitudes and longitudes are valid 4326 coordinates
+    is_valid_lat(&lat_final)?;
+    is_valid_lon(&lon_final)?;
     Ok((lat_final, lon_final))
 }
 
