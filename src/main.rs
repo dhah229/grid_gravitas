@@ -15,10 +15,13 @@ use io::{read_shapefile, write_netcdf_output, write_txt_output};
 use geometry::{
     process_lat_lon, 
     create_grid_cells, 
-    process_shape_intersections,
-    parallel_process_shape_intersections,
+    process_shape_intersections_netcdf,
+    process_shape_intersections_txt,
+    parallel_process_shape_intersections_netcdf,
+    parallel_process_shape_intersections_txt,
 };
 use cli::Cli;
+use utils::OutputDataType;
 
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -37,26 +40,30 @@ fn run_with_args(args: Cli) -> Result<(), Box<dyn Error>> {
     let shapes = read_shapefile(Path::new(&args.shp), &args.col, "8857")?;
 
     // Process the shape intersections with grid cells
-    let (netcdf_data, mut rvn_data) = if args.parallel {
-        parallel_process_shape_intersections(
-            nlat, nlon, 
-            grid_cell_geom, 
-            shapes,
-        )?
-    } else {
-        process_shape_intersections(
-            nlat, nlon, 
-            grid_cell_geom, 
-            shapes,
-        )?
+    let data: OutputDataType = match (args.parallel, args.rv_out) {
+        (true, true) => OutputDataType::Txt(parallel_process_shape_intersections_txt(
+            nlat, nlon, grid_cell_geom, shapes,
+        )?),
+        (true, false) => OutputDataType::NetCDF(parallel_process_shape_intersections_netcdf(
+            nlon, grid_cell_geom, shapes,
+        )?),
+        (false, true) => OutputDataType::Txt(process_shape_intersections_txt(
+            nlat, nlon, grid_cell_geom, shapes,
+        )?),
+        (false, false) => OutputDataType::NetCDF(process_shape_intersections_netcdf(
+            nlon, grid_cell_geom, shapes,
+        )?),
     };
 
     // Write to output file
     let output_path = Path::new(&args.out);
-    if args.rv_out {
-        write_txt_output(output_path, &mut rvn_data)?;
-    } else {
-        write_netcdf_output(output_path, &netcdf_data)?;
+    match data {
+        OutputDataType::NetCDF(data) => {
+            write_netcdf_output(output_path, &data)?;
+        }
+        OutputDataType::Txt(mut data) => {
+            write_txt_output(output_path, &mut data)?;
+        }
     }
     Ok(())
 }

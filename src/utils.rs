@@ -3,6 +3,11 @@ use ndarray::Array2;
 /// Area threshold to determine the error of the area
 pub const AREA_THRESHOLD: f64 = 0.05;
 
+pub enum OutputDataType {
+    NetCDF(Vec<(f64, usize, usize)>),
+    Txt(RvnGridWeights),
+}
+
 /// Struct to hold the Raven grid weights
 #[derive(Debug)]
 pub struct RvnGridWeights {

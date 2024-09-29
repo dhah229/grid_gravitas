@@ -207,29 +207,20 @@ fn calculate_area(geometry: &Geometry) -> f64 {
 }
 
 /// Used to process a single shape and calculate the intersection with grid cells
-fn process_single_shape_intersection(
-    basin_id: &String,
+fn process_shape(
     shape_geometry: &Geometry,
     rtree: &RTree<GridCell>,
     nlon: usize,
-    area_error_threshold: f64,
-    index: usize,
-) -> (Vec<(f64, usize, usize)>, Vec<(String, usize, f64)>) {
-    let mut netcdf_data_chunk = Vec::new();
-    let mut txt_data_chunk = Vec::new();
-
+) -> Option<(Vec<(usize, f64)>, f64, f64)> {
     // Calculate the area of the shape
     let shape_area = match shape_geometry {
         Geometry::Polygon(ref poly) => poly.unsigned_area(),
         Geometry::MultiPolygon(ref mpoly) => mpoly.unsigned_area(),
-        _ => return (netcdf_data_chunk, txt_data_chunk), // Skip if not a polygon or multipolygon
+        _ => return None, // Skip if not a polygon or multipolygon
     };
 
     // Get the bounding rectangle of the shape
-    let shape_envelope = match shape_geometry.bounding_rect() {
-        Some(env) => env,
-        None => return (netcdf_data_chunk, txt_data_chunk), // Skip if no bounding rectangle
-    };
+    let shape_envelope = shape_geometry.bounding_rect()?;
 
     let mut area_all = 0.0;
     let mut cellid_fraction = Vec::new();
@@ -254,37 +245,95 @@ fn process_single_shape_intersection(
         }
     }
 
-    // Calculate error
     let error = (shape_area - area_all) / shape_area;
+    Some((cellid_fraction, area_all, error))
+}
 
-    if error.abs() > area_error_threshold && shape_area > 500_000.0 {
-        println!("Error for basin {}: {:.2}%", basin_id, error * 100.0);
-        for (cell_id, fraction) in cellid_fraction {
-            netcdf_data_chunk.push((fraction, cell_id + 1, index + 1));
-            txt_data_chunk.push((basin_id.clone(), cell_id, fraction));
-        }
-    } else {
-        let correction_factor = 1.0 / (1.0 - error);
-        for (cell_id, fraction) in cellid_fraction {
-            let corrected = fraction * correction_factor;
-            netcdf_data_chunk.push((corrected, cell_id + 1, index + 1));
-            txt_data_chunk.push((basin_id.clone(), cell_id, corrected));
+fn process_single_shape_netcdf(
+    shape_geometry: &Geometry,
+    rtree: &RTree<GridCell>,
+    nlon: usize,
+    area_error_threshold: f64,
+    index: usize,
+) -> Vec<(f64, usize, usize)> {
+    let mut netcdf_data_chunk = Vec::new();
+
+    if let Some((cellid_fraction, _area_all, error)) = process_shape(shape_geometry, rtree, nlon) {
+        if error.abs() > area_error_threshold {
+            for (cell_id, fraction) in cellid_fraction {
+                netcdf_data_chunk.push((fraction, cell_id + 1, index + 1));
+            }
+        } else {
+            let correction_factor = 1.0 / (1.0 - error);
+            for (cell_id, fraction) in cellid_fraction {
+                let corrected = fraction * correction_factor;
+                netcdf_data_chunk.push((corrected, cell_id + 1, index + 1));
+            }
         }
     }
 
-    (netcdf_data_chunk, txt_data_chunk)
+    netcdf_data_chunk
 }
 
-/// Process the shape intersections with grid cells and collect results
-pub fn process_shape_intersections(
+fn process_single_shape_txt(
+    basin_id: &String,
+    shape_geometry: &Geometry,
+    rtree: &RTree<GridCell>,
+    nlon: usize,
+    area_error_threshold: f64,
+) -> Vec<(String, usize, f64)> {
+    let mut txt_data_chunk = Vec::new();
+
+    if let Some((cellid_fraction, _area_all, error)) = process_shape(shape_geometry, rtree, nlon) {
+        if error.abs() > area_error_threshold {
+            for (cell_id, fraction) in cellid_fraction {
+                txt_data_chunk.push((basin_id.clone(), cell_id, fraction));
+            }
+        } else {
+            let correction_factor = 1.0 / (1.0 - error);
+            for (cell_id, fraction) in cellid_fraction {
+                let corrected = fraction * correction_factor;
+                txt_data_chunk.push((basin_id.clone(), cell_id, corrected));
+            }
+        }
+    }
+
+    txt_data_chunk
+}
+
+/// Process the shape intersections with grid cells and collect results for netcdf
+pub fn process_shape_intersections_netcdf(
+    nlon: usize, 
+    grid_cell_geom: Vec<Vec<Polygon<f64>>>, 
+    shapes: Vec<(String, Geometry)>, 
+) -> Result<Vec<(f64, usize, usize)>, Box<dyn Error>> {
+    let mut netcdf_data = Vec::new();
+
+    // 5 percent area error threshold. Is 5 percent enough?
+    let area_error_threshold = AREA_THRESHOLD;
+
+    // Build the R-tree from grid cells
+    let rtree = build_grid_rtree(grid_cell_geom);
+
+    // Iterate over the basins and calculate the intersection with grid cells
+    for (index, (_, shape_geometry)) in shapes.into_iter().enumerate() {
+        let netcdf_chunk = process_single_shape_netcdf(
+            &shape_geometry, &rtree, nlon, area_error_threshold, index,
+        );
+        netcdf_data.extend(netcdf_chunk);
+    }
+    Ok(netcdf_data)
+}
+
+/// Process the shape intersections with grid cells and collect results for netcdf
+pub fn process_shape_intersections_txt(
     nlat: usize, 
     nlon: usize, 
     grid_cell_geom: Vec<Vec<Polygon<f64>>>, 
     shapes: Vec<(String, Geometry)>, 
-) -> Result<(Vec<(f64, usize, usize)>, RvnGridWeights), Box<dyn Error>> {
+) -> Result<RvnGridWeights, Box<dyn Error>> {
     let nsubbasins = shapes.len() as i32;
     let ncells = (nlat * nlon) as i32;
-    let mut netcdf_data = Vec::new();
     let mut txt_data = Vec::new();
 
     // 5 percent area error threshold. Is 5 percent enough?
@@ -294,11 +343,10 @@ pub fn process_shape_intersections(
     let rtree = build_grid_rtree(grid_cell_geom);
 
     // Iterate over the basins and calculate the intersection with grid cells
-    for (index, (basin_id, shape_geometry)) in shapes.into_iter().enumerate() {
-        let (netcdf_chunk, txt_chunk) = process_single_shape_intersection(
-            &basin_id, &shape_geometry, &rtree, nlon, area_error_threshold, index,
+    for (basin_id, shape_geometry) in shapes.into_iter() {
+        let txt_chunk = process_single_shape_txt(
+            &basin_id, &shape_geometry, &rtree, nlon, area_error_threshold,
         );
-        netcdf_data.extend(netcdf_chunk);
         txt_data.extend(txt_chunk);
     }
 
@@ -308,16 +356,50 @@ pub fn process_shape_intersections(
         ncells,
     };
 
-    Ok((netcdf_data, rvn_data))
+    Ok(rvn_data)
 }
 
 /// Parallel process the shape intersections with grid cells and collect results
-pub fn parallel_process_shape_intersections(
+pub fn parallel_process_shape_intersections_netcdf(
+    nlon: usize,
+    grid_cell_geom: Vec<Vec<Polygon<f64>>>,
+    shapes: Vec<(String, Geometry)>,
+) -> Result<Vec<(f64, usize, usize)>, Box<dyn Error>> {
+
+    // 5 percent area error threshold
+    let area_error_threshold = AREA_THRESHOLD;
+
+    // Build the R-tree from grid cells
+    let rtree = build_grid_rtree(grid_cell_geom);
+
+    // Use Rayon to parallelize the loop
+    let results: Vec<_> = shapes
+        .par_iter()
+        .enumerate()
+        .map(|(index, (_, shape_geometry))| {
+            process_single_shape_netcdf(
+                shape_geometry, &rtree, nlon, area_error_threshold, index,
+            )
+        })
+        .collect();
+
+    // Combine the results from all threads
+    let mut netcdf_data = Vec::new();
+
+    for netcdf_chunk in results {
+        netcdf_data.extend(netcdf_chunk);
+    }
+
+    Ok(netcdf_data)
+}
+
+/// Parallel process the shape intersections with grid cells and collect results
+pub fn parallel_process_shape_intersections_txt(
     nlat: usize,
     nlon: usize,
     grid_cell_geom: Vec<Vec<Polygon<f64>>>,
     shapes: Vec<(String, Geometry)>,
-) -> Result<(Vec<(f64, usize, usize)>, RvnGridWeights), Box<dyn Error>> {
+) -> Result< RvnGridWeights, Box<dyn Error>> {
     let nsubbasins = shapes.len() as i32;
     let ncells = (nlat * nlon) as i32;
 
@@ -331,19 +413,17 @@ pub fn parallel_process_shape_intersections(
     let results: Vec<_> = shapes
         .par_iter()
         .enumerate()
-        .map(|(index, (basin_id, shape_geometry))| {
-            process_single_shape_intersection(
-                basin_id, shape_geometry, &rtree, nlon, area_error_threshold, index,
+        .map(|(_, (basin_id, shape_geometry))| {
+            process_single_shape_txt(
+                basin_id, shape_geometry, &rtree, nlon, area_error_threshold,
             )
         })
         .collect();
 
     // Combine the results from all threads
-    let mut netcdf_data = Vec::new();
     let mut txt_data = Vec::new();
 
-    for (netcdf_chunk, txt_chunk) in results {
-        netcdf_data.extend(netcdf_chunk);
+    for txt_chunk in results {
         txt_data.extend(txt_chunk);
     }
 
@@ -353,7 +433,7 @@ pub fn parallel_process_shape_intersections(
         ncells,
     };
 
-    Ok((netcdf_data, rvn_data))
+    Ok(rvn_data)
 }
 
 
@@ -756,13 +836,19 @@ mod tests {
         let area_error_threshold = 0.01;
         let index = 0;
 
-        let (netcdf_data_chunk, txt_data_chunk) = process_single_shape_intersection(
-            &basin_id,
+        let netcdf_data_chunk = process_single_shape_netcdf(
             &shape_geometry,
             &rtree,
             nlon,
             area_error_threshold,
             index,
+        );
+        let txt_data_chunk = process_single_shape_txt(
+            &basin_id,
+            &shape_geometry,
+            &rtree,
+            nlon,
+            area_error_threshold,
         );
         assert!(!netcdf_data_chunk.is_empty(), "NetCDF data chunk should not be empty");
         assert!(!txt_data_chunk.is_empty(), "TXT data chunk should not be empty");
@@ -815,13 +901,19 @@ mod tests {
         let nlon = 2;
         let area_error_threshold = 0.01;
         let index = 0;
-        let (netcdf_data_chunk, txt_data_chunk) = process_single_shape_intersection(
-            &basin_id,
+        let netcdf_data_chunk = process_single_shape_netcdf(
             &shape_geometry,
             &rtree,
             nlon,
             area_error_threshold,
             index,
+        );
+        let txt_data_chunk = process_single_shape_txt(
+            &basin_id,
+            &shape_geometry,
+            &rtree,
+            nlon,
+            area_error_threshold,
         );
         assert!(!netcdf_data_chunk.is_empty(), "NetCDF data chunk should not be empty");
         assert!(!txt_data_chunk.is_empty(), "TXT data chunk should not be empty");
@@ -864,7 +956,8 @@ mod tests {
         let shapes = vec![("test_basin".to_string(), shape_geometry)];
         let nlat = 1;
         let nlon = 2;
-        let (netcdf_data, rvn_data) = process_shape_intersections(nlat, nlon, grid_cell_geom, shapes).unwrap();
+        let netcdf_data = process_shape_intersections_netcdf(nlon, grid_cell_geom.clone(), shapes.clone()).unwrap();
+        let rvn_data = process_shape_intersections_txt(nlat, nlon, grid_cell_geom.clone(), shapes.clone()).unwrap();
         let expected_fraction = 0.5;
         assert_eq!(netcdf_data[0].0, expected_fraction);
         assert_eq!(netcdf_data[1].0, expected_fraction);
@@ -902,7 +995,8 @@ mod tests {
         let shapes = vec![("test_basin".to_string(), shape_geometry)];
         let nlat = 1;
         let nlon = 2;
-        let (netcdf_data, rvn_data) = parallel_process_shape_intersections(nlat, nlon, grid_cell_geom, shapes).unwrap();
+        let netcdf_data = parallel_process_shape_intersections_netcdf(nlon, grid_cell_geom.clone(), shapes.clone()).unwrap();
+        let rvn_data = parallel_process_shape_intersections_txt(nlat, nlon, grid_cell_geom.clone(), shapes.clone()).unwrap();
         let expected_fraction = 0.5;
         assert_eq!(netcdf_data[0].0, expected_fraction);
         assert_eq!(netcdf_data[1].0, expected_fraction);
