@@ -32,6 +32,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 // Why 8857?
 // We need a projected coordinate system to calculate areas and 8857 is an Equal Earth Projection.
 // Although this has inaccuracies near the poles, it is good enough for our purposes.
+// We could use something like ESRI:102017(North Pole Lambert Azimuthal Equal Area). 
+// But doesn't cover the globe.
 
 fn run_with_args(args: Cli) -> Result<(), Box<dyn Error>> {
     // Make grid of latitudes and longitudes
