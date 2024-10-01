@@ -118,6 +118,15 @@ pub fn shape_to_geometry(
         coords.push(coords[0]);
     }
 
+    // Before projection, adjust latitudes at the poles
+    for coord in &mut coords {
+        if coord.y > 90.0 {
+            coord.y = 89.9999;
+        } else if coord.y < -90.0 {
+            coord.y = -89.9999;
+        }
+    }
+
     let mut exterior = LineString::from(coords);
     exterior = exterior
         .try_map_coords(|coord| proj.convert(coord)).expect("Failed to transform coordinates");
