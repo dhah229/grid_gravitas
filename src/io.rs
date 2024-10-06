@@ -137,8 +137,7 @@ pub fn read_shapefile(
     let source_srs = layer.spatial_ref().ok_or("Layer has no spatial reference")?;
 
     // Create the target spatial reference
-    let target_srs_def = format!("EPSG:{}", target_epsg);
-    let target_srs = SpatialRef::from_definition(&target_srs_def)?;
+    let target_srs = SpatialRef::from_definition(target_epsg)?;
 
     // Create a coordinate transformation
     let coord_transform = CoordTransform::new(&source_srs, &target_srs)?;
@@ -266,7 +265,7 @@ mod tests {
         let result = read_shapefile(
            path, 
             "HRU_ID", 
-            "8857",
+            "EPSG:8857",
         );
         
         assert!(result.is_ok());
@@ -280,7 +279,7 @@ mod tests {
         let result = read_shapefile(
            path, 
             "HRU_ID", 
-            "8857",
+            "EPSG:8857",
         );
         
         assert!(result.is_err());
@@ -303,6 +302,7 @@ mod tests {
             rv_out: false,
             grd_bnds: false,
             parallel: false,
+            epsg: "EPSG:8857".to_string(),
         };
         let result = read_lat_lon(&file, &args);        
         assert!(result.is_ok());
@@ -328,6 +328,7 @@ mod tests {
             rv_out: false,
             grd_bnds: false,
             parallel: false,
+            epsg: "EPSG:8857".to_string(),
         };
         let result = read_lat_lon(&file, &args);
         assert!(result.is_ok());

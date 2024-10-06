@@ -40,10 +40,10 @@ fn run_with_args(args: Cli) -> Result<(), Box<dyn Error>> {
     let (lath, lonh, nlat, nlon) = process_lat_lon(&args)?;
 
     // Create grid of polygons for each grid cell
-    let grid_cell_geom = create_grid_cells(nlat, nlon, &lath, &lonh)?;
+    let grid_cell_geom = create_grid_cells(nlat, nlon, &lath, &lonh, &args.epsg)?;
 
     // Get the shapefile ID and geometry to a Vec of tuples
-    let shapes = read_shapefile(Path::new(&args.shp), &args.col, "8857")?;
+    let shapes = read_shapefile(Path::new(&args.shp), &args.col, &args.epsg)?;
 
     // Process the shape intersections with grid cells
     let data: OutputDataType = match (args.parallel, args.rv_out) {
@@ -102,6 +102,7 @@ mod tests {
             out: temp_path_str.to_string(),
             rv_out: false,
             parallel: false,
+            epsg: "EPSG:8857".to_string(),
         };
         run_with_args(args).expect("Failed to run with args");
 
@@ -130,6 +131,7 @@ mod tests {
             out: temp_path_str.to_string(),
             rv_out: false,
             parallel: true,
+            epsg: "EPSG:8857".to_string(),
         };
         run_with_args(args).expect("Failed to run with args");
 
@@ -159,6 +161,7 @@ mod tests {
             out: temp_path_str.to_string(),
             rv_out: true,
             parallel: false,
+            epsg: "EPSG:8857".to_string(),
         };
         run_with_args(args).expect("Failed to run with args");
 
@@ -197,6 +200,7 @@ mod tests {
             out: temp_path_str.to_string(),
             rv_out: true,
             parallel: true,
+            epsg: "EPSG:8857".to_string(),
         };
         run_with_args(args).expect("Failed to run with args");
 

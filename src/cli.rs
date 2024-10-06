@@ -42,6 +42,10 @@ pub struct Cli {
     #[arg(short = 'p', long)]
     pub parallel: bool,
 
+    /// Target EPSG to reproject the grid and shapes for area calculation
+    #[arg(short = 'e', long, default_value = "EPSG:8857")]
+    pub epsg: String,
+
 }
 
 

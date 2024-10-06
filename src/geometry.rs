@@ -160,10 +160,11 @@ pub fn create_grid_cells(
     nlat: usize, 
     nlon: usize, 
     lath: &Array2<f32>, 
-    lonh: &Array2<f32>
+    lonh: &Array2<f32>,
+    target_epsg: &str,
 ) -> Result<Vec<Vec<Polygon<f64>>>, Box<dyn Error>> {
     let mut grid_cell_geom: Vec<Vec<Polygon<f64>>> = Vec::with_capacity(nlat);
-    let proj = Proj::new_known_crs("EPSG:4326", "EPSG:8857", None).expect("Failed to create projection");
+    let proj = Proj::new_known_crs("EPSG:4326", target_epsg, None).expect("Failed to create projection");
 
     for ilat in 0..nlat {
         let mut row: Vec<Polygon<f64>> = Vec::with_capacity(nlon);
@@ -582,7 +583,8 @@ mod tests {
     fn test_create_grid_cells() {
         let lath: Array2<f32> = Array2::from_shape_vec((2, 2), vec![10.0, 20.0, 30.0, 40.0]).unwrap();
         let lonh: Array2<f32> = Array2::from_shape_vec((2, 2), vec![100.0, 110.0, 120.0, 130.0]).unwrap();
-        let grid_cell_geom = create_grid_cells(1, 1, &lath, &lonh).unwrap();
+        let target_epsg = "EPSG:3857".to_string();
+        let grid_cell_geom = create_grid_cells(1, 1, &lath, &lonh, &target_epsg).unwrap();
         assert_eq!(grid_cell_geom.len(), 1);
         assert_eq!(grid_cell_geom[0].len(), 1);
     }
