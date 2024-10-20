@@ -237,7 +237,7 @@ fn calculate_area(geometry: &Geometry) -> f64 {
     match geometry {
         Geometry::Polygon(ref poly) => poly.unsigned_area(),
         Geometry::MultiPolygon(ref mpoly) => mpoly.unsigned_area(),
-        _ => 0.0,
+        _ => 0.0, // Since it can be a LineString.
     }
 }
 
