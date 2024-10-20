@@ -8,7 +8,6 @@ use geo::{
     algorithm::area::Area,
     BoundingRect,
     Geometry,
-    MultiPolygon,
     Coord,
     LineString,
     MapCoords,
@@ -481,7 +480,8 @@ mod tests {
         Coord,
         Geometry, 
         polygon, 
-        Polygon, 
+        Polygon,
+        MultiPolygon, 
         algorithm::contains::Contains,
     }; 
     use crate::cli::Cli;
