@@ -41,7 +41,6 @@ pub fn build_grid_rtree(grid_cell_geom: Vec<Vec<Polygon<f64>>>) -> RTree<GridCel
                 ilon,
                 polygon: polygon,
             });
-            println!("Grid cell pushed for ilat: {}, ilon: {}", ilat, ilon);
         }
     }
 
