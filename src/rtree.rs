@@ -1,6 +1,5 @@
 use geo::prelude::*;
 use geo_types::Polygon;
-use rayon::prelude::*;
 use rstar::{RTree, RTreeObject, AABB};
 
 // These functions are used to create the grid cells and build the RTree

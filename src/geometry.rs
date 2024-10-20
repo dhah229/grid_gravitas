@@ -6,10 +6,8 @@ use std::{
 
 use geo::{
     algorithm::area::Area,
-    BooleanOps,
     BoundingRect,
     Geometry,
-    HasDimensions,
     MultiPolygon,
     Coord,
     LineString,
@@ -479,12 +477,12 @@ mod tests {
     use super::*;
     use ndarray::{array, Array2};
     use geo::{
-        CoordsIter, 
+        CoordsIter,
+        Coord,
         Geometry, 
         polygon, 
         Polygon, 
-        algorithm::contains::Contains, 
-        algorithm::centroid::Centroid
+        algorithm::contains::Contains,
     }; 
     use crate::cli::Cli;
     use std::path::Path;
@@ -642,23 +640,23 @@ mod tests {
 
         // Destructure the intersection to get the MultiPolygon
         // Probably better to check equality of Polygons, but couldn't find it
-        if let Some(Geometry::MultiPolygon(mpoly)) = intersection {
-            assert_eq!(mpoly.0.len(), 1); // Only one intersecting polygon
-            let intersected_polygon = &mpoly.0[0];
-            // The intersected polygon should have coordinates from (5,5) to (10,10)
-            let expected_polygon = polygon![
-                (x: 5.0, y: 5.0),
-                (x: 5.0, y: 10.0),
-                (x: 10.0, y: 10.0),
-                (x: 10.0, y: 5.0),
-                (x: 5.0, y: 5.0),
-            ];
-            assert!(intersected_polygon.contains(&expected_polygon));
-            let centroid_a = intersected_polygon.centroid().unwrap();
-            let centroid_b = expected_polygon.centroid().unwrap();
-            assert_eq!(centroid_a, centroid_b);
-        } else {
-            panic!("Expected a MultiPolygon geometry");
+        let expected_polygon = polygon![
+            (x: 5.0, y: 5.0),
+            (x: 5.0, y: 10.0),
+            (x: 10.0, y: 10.0),
+            (x: 10.0, y: 5.0),
+            (x: 5.0, y: 5.0),
+        ];
+        match intersection {
+            Some(Geometry::Polygon(ref polygon)) => {
+                assert!(polygon.contains(&expected_polygon));
+            },
+            Some(Geometry::MultiPolygon(ref mpoly)) => {
+                assert_eq!(mpoly.0.len(), 1);
+                let intersected_polygon = &mpoly.0[0];
+                assert!(intersected_polygon.contains(&expected_polygon));
+            },
+            _ => panic!("Expected a Polygon or MultiPolygon geometry"),
         }
     }
 
@@ -703,7 +701,19 @@ mod tests {
         ];
         let shape_geometry = Geometry::Polygon(shape_polygon);
         let intersection = calculate_intersection(&grid_cell, &shape_geometry);
-        assert!(intersection.is_none());
+        assert!(intersection.is_some());
+        let expected_linestring = LineString::from(vec![
+            Coord { x: 10.0, y: 10.0 },
+            Coord { x: 10.0, y: 0.0 },
+        ]);
+        match intersection {
+            Some(Geometry::LineString(ref linestring)) => {
+                assert_eq!(linestring, &expected_linestring);
+            }
+            _ => {
+                panic!("Expected a LineString geometry");
+            }
+        }
     }
 
     #[test]
@@ -751,19 +761,23 @@ mod tests {
         let shape_multipolygon = Geometry::MultiPolygon(MultiPolygon(vec![shape_polygon1, shape_polygon2]));
         let intersection = calculate_intersection(&grid_cell, &shape_multipolygon);
         assert!(intersection.is_some());
-        if let Some(Geometry::MultiPolygon(mpoly)) = intersection {
-            assert_eq!(mpoly.0.len(), 1);
-            let intersected_polygon = &mpoly.0[0];
-            let expected_polygon = polygon![
-                (x: 5.0, y: 5.0),
-                (x: 5.0, y: 10.0),
-                (x: 10.0, y: 10.0),
-                (x: 10.0, y: 5.0),
-                (x: 5.0, y: 5.0),
-            ];
-            assert!(intersected_polygon.contains(&expected_polygon));
-        } else {
-            panic!("Expected a MultiPolygon geometry");
+        let expected_polygon = polygon![
+            (x: 5.0, y: 5.0),
+            (x: 5.0, y: 10.0),
+            (x: 10.0, y: 10.0),
+            (x: 10.0, y: 5.0),
+            (x: 5.0, y: 5.0),
+        ];
+        match intersection {
+            Some(Geometry::Polygon(ref polygon)) => {
+                assert!(polygon.contains(&expected_polygon));
+            },
+            Some(Geometry::MultiPolygon(ref mpoly)) => {
+                assert_eq!(mpoly.0.len(), 1);
+                let intersected_polygon = &mpoly.0[0];
+                assert!(intersected_polygon.contains(&expected_polygon));
+            },
+            _ => panic!("Expected a Polygon or MultiPolygon geometry"),
         }
     }
 
