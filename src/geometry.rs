@@ -1,6 +1,7 @@
 use std::{
     error::Error,
     path::Path,
+    convert::TryInto,
 };
 
 use geo::{
@@ -14,6 +15,10 @@ use geo::{
     LineString,
     MapCoords,
     Polygon,
+};
+use geos::{
+    Geometry as GeosGeometry,
+    Geom,
 };
 
 use rstar::{AABB, RTree};
@@ -183,22 +188,44 @@ pub fn create_grid_cells(
     Ok(grid_cell_geom)
 }
 
+/// Check if the bounding boxes intersect by comparing their coordinates
+fn bounding_boxes_intersect(bbox1: &geo_types::Rect<f64>, bbox2: &geo_types::Rect<f64>) -> bool {
+    !(bbox1.max().x < bbox2.min().x || bbox1.min().x > bbox2.max().x || 
+      bbox1.max().y < bbox2.min().y || bbox1.min().y > bbox2.max().y)
+}
+
 /// Calculate the intersection between the grid cell and the shape geometry
 fn calculate_intersection(grid_cell: &Polygon<f64>, shape_geometry: &Geometry) -> Option<Geometry> {
+    // Check the bounding boxes of the grid cell and shape geometry
+    let grid_cell_bbox = grid_cell.bounding_rect()?;
+    let shape_bbox = shape_geometry.bounding_rect()?;
+    if !bounding_boxes_intersect(&grid_cell_bbox, &shape_bbox) {
+        return None;
+    }
+
+    // Convert grid cell to GEOS Geometry and calculate the intersection
+    let grid_cell_geos: GeosGeometry = grid_cell.try_into().expect("Failed to convert Polygon to GEOS Geometry");
     match shape_geometry {
         Geometry::Polygon(ref shape_poly) => {
-            let intersection = grid_cell.intersection(shape_poly);
-            if !intersection.is_empty() {
-                Some(Geometry::MultiPolygon(intersection))
+            // Convert shape polygon to GEOS Geometry
+            let shape_poly_geos: GeosGeometry = shape_poly.try_into().ok()?;
+            let intersection = grid_cell_geos.intersection(&shape_poly_geos).ok()?;
+
+            if !intersection.is_empty().ok()? {
+                let result: Geometry<f64> = intersection.try_into().ok()?;
+                Some(result)
             } else {
                 None
             }
         },
         Geometry::MultiPolygon(ref shape_mpoly) => {
-            let grid_cell_mpoly = MultiPolygon(vec![grid_cell.clone()]);
-            let intersection = grid_cell_mpoly.intersection(shape_mpoly);
-            if !intersection.is_empty() {
-                Some(Geometry::MultiPolygon(intersection))
+            // Convert MultiPolygon to GEOS Geometry
+            let shape_mpoly_geos: GeosGeometry = shape_mpoly.try_into().ok()?;
+            let intersection = grid_cell_geos.intersection(&shape_mpoly_geos).ok()?;
+
+            if !intersection.is_empty().ok()? {
+                let result: Geometry<f64> = intersection.try_into().ok()?;
+                Some(result)
             } else {
                 None
             }

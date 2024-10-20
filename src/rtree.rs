@@ -1,5 +1,6 @@
 use geo::prelude::*;
 use geo_types::Polygon;
+use rayon::prelude::*;
 use rstar::{RTree, RTreeObject, AABB};
 
 // These functions are used to create the grid cells and build the RTree
@@ -32,7 +33,7 @@ impl Eq for GridCell {}
 
 // Probably need to change this we are not doing vec of vecs.
 pub fn build_grid_rtree(grid_cell_geom: Vec<Vec<Polygon<f64>>>) -> RTree<GridCell> {
-    let mut grid_cells = Vec::new();
+    let mut grid_cells = Vec::with_capacity(grid_cell_geom.len() * grid_cell_geom[0].len());
 
     for (ilat, row) in grid_cell_geom.into_iter().enumerate() {
         for (ilon, polygon) in row.into_iter().enumerate() {
@@ -41,6 +42,7 @@ pub fn build_grid_rtree(grid_cell_geom: Vec<Vec<Polygon<f64>>>) -> RTree<GridCel
                 ilon,
                 polygon: polygon,
             });
+            println!("Grid cell pushed for ilat: {}, ilon: {}", ilat, ilon);
         }
     }
 
