@@ -22,24 +22,39 @@ use geometry::{
 };
 use cli::Cli;
 use utils::OutputDataType;
+use log::info;
+use env_logger;
 
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Cli::parse();
+
+    if args.verbose {
+        env_logger::Builder::from_default_env()
+            .filter_level(log::LevelFilter::Debug)
+            .init();
+    } else {
+        env_logger::Builder::from_default_env()
+            .filter_level(log::LevelFilter::Info)
+            .init();
+    }
     run_with_args(args)
 }
 
 fn run_with_args(args: Cli) -> Result<(), Box<dyn Error>> {
     // Make grid of latitudes and longitudes
     let (lath, lonh, nlat, nlon) = process_lat_lon(&args)?;
+    info!("Grid of latitudes and longitudes created with dimensions: {} x {}", nlat, nlon);
 
     // Create grid of polygons for each grid cell
     let grid_cell_geom = create_grid_cells(nlat, nlon, &lath, &lonh, &args.epsg)?;
 
     // Get the shapefile ID and geometry to a Vec of tuples
-    let shapes = read_shapefile(Path::new(&args.shp), &args.col, &args.epsg)?;
+    let shapes = read_shapefile(Path::new(&args.shp), &args.id, &args.epsg)?;
+    info!("Shapefile read with {} shapes", shapes.len());
 
     // Process the shape intersections with grid cells
+    info!("Processing shape intersections with grid cells");
     let data: OutputDataType = match (args.parallel, args.rv_out) {
         (true, true) => OutputDataType::Txt(parallel_process_shape_intersections_txt(
             nlat, nlon, grid_cell_geom, shapes,
@@ -57,6 +72,7 @@ fn run_with_args(args: Cli) -> Result<(), Box<dyn Error>> {
 
     // Write to output file
     let output_path = Path::new(&args.out);
+    info!("Writing output to {:?}", output_path);
     match data {
         OutputDataType::NetCDF(data) => {
             write_netcdf_output(output_path, &data)?;
@@ -65,6 +81,7 @@ fn run_with_args(args: Cli) -> Result<(), Box<dyn Error>> {
             write_txt_output(output_path, &mut data)?;
         }
     }
+    info!("Output written successfully");
     Ok(())
 }
 
@@ -88,15 +105,16 @@ mod tests {
         let path_to_hru_str = path_to_hru.to_str().unwrap();
         let args = Cli {
             nc: path_to_nc_str.to_string(),
-            dimname: vec!["longitude".to_string(), "latitude".to_string()],
-            varname: vec!["longitude".to_string(), "latitude".to_string()],
+            dim: vec!["longitude".to_string(), "latitude".to_string()],
+            coord: vec!["longitude".to_string(), "latitude".to_string()],
             shp: path_to_hru_str.to_string(),
-            col: "HRU_ID".to_string(),
+            id: "HRU_ID".to_string(),
             grd_bnds: false,
             out: temp_path_str.to_string(),
             rv_out: false,
             parallel: false,
             epsg: "EPSG:8857".to_string(),
+            verbose: false,
         };
         run_with_args(args).expect("Failed to run with args");
 
@@ -117,15 +135,16 @@ mod tests {
         let path_to_hru_str = path_to_hru.to_str().unwrap();
         let args = Cli {
             nc: path_to_nc_str.to_string(),
-            dimname: vec!["longitude".to_string(), "latitude".to_string()],
-            varname: vec!["longitude".to_string(), "latitude".to_string()],
+            dim: vec!["longitude".to_string(), "latitude".to_string()],
+            coord: vec!["longitude".to_string(), "latitude".to_string()],
             shp: path_to_hru_str.to_string(),
-            col: "HRU_ID".to_string(),
+            id: "HRU_ID".to_string(),
             grd_bnds: false,
             out: temp_path_str.to_string(),
             rv_out: false,
             parallel: true,
             epsg: "EPSG:8857".to_string(),
+            verbose: false,
         };
         run_with_args(args).expect("Failed to run with args");
 
@@ -147,15 +166,16 @@ mod tests {
         let path_to_hru_str = path_to_hru.to_str().unwrap();
         let args = Cli {
             nc: path_to_nc_str.to_string(),
-            dimname: vec!["longitude".to_string(), "latitude".to_string()],
-            varname: vec!["longitude".to_string(), "latitude".to_string()],
+            dim: vec!["longitude".to_string(), "latitude".to_string()],
+            coord: vec!["longitude".to_string(), "latitude".to_string()],
             shp: path_to_hru_str.to_string(),
-            col: "HRU_ID".to_string(),
+            id: "HRU_ID".to_string(),
             grd_bnds: false,
             out: temp_path_str.to_string(),
             rv_out: true,
             parallel: false,
             epsg: "EPSG:8857".to_string(),
+            verbose: false
         };
         run_with_args(args).expect("Failed to run with args");
 
@@ -186,15 +206,16 @@ mod tests {
         let path_to_hru_str = path_to_hru.to_str().unwrap();
         let args = Cli {
             nc: path_to_nc_str.to_string(),
-            dimname: vec!["longitude".to_string(), "latitude".to_string()],
-            varname: vec!["longitude".to_string(), "latitude".to_string()],
+            dim: vec!["longitude".to_string(), "latitude".to_string()],
+            coord: vec!["longitude".to_string(), "latitude".to_string()],
             shp: path_to_hru_str.to_string(),
-            col: "HRU_ID".to_string(),
+            id: "HRU_ID".to_string(),
             grd_bnds: false,
             out: temp_path_str.to_string(),
             rv_out: true,
             parallel: true,
             epsg: "EPSG:8857".to_string(),
+            verbose: false,
         };
         run_with_args(args).expect("Failed to run with args");
 

@@ -27,6 +27,7 @@ use crate::utils::{RvnGridWeights, AREA_THRESHOLD};
 use crate::io::read_lat_lon;
 use crate::cli::Cli;
 use crate::rtree::{build_grid_rtree, GridCell};
+use log::debug;
 
 
 // Create a meshgrid from 1D arrays of latitude and longitude
@@ -292,13 +293,15 @@ fn process_single_shape_netcdf(
 ) -> Vec<(f64, usize, usize)> {
     let mut netcdf_data_chunk = Vec::new();
 
-    if let Some((cellid_fraction, _area_all, error)) = process_shape(shape_geometry, rtree, nlon) {
+    if let Some((cellid_fraction, area_all, error)) = process_shape(shape_geometry, rtree, nlon) {
         if error.abs() > area_error_threshold {
+            debug!("Processing basin: {}, Area: {}, Error is greater than threshold: {}", index, area_all * 1e-6, error);
             for (cell_id, fraction) in cellid_fraction {
                 netcdf_data_chunk.push((fraction, cell_id + 1, index + 1));
             }
         } else {
             let correction_factor = 1.0 / (1.0 - error);
+            debug!("Processing basin: {}, Area: {}, Error correction factor: {}", index, area_all * 1e-6,correction_factor);
             for (cell_id, fraction) in cellid_fraction {
                 let corrected = fraction * correction_factor;
                 netcdf_data_chunk.push((corrected, cell_id + 1, index + 1));
@@ -318,13 +321,15 @@ fn process_single_shape_txt(
 ) -> Vec<(String, usize, f64)> {
     let mut txt_data_chunk = Vec::new();
 
-    if let Some((cellid_fraction, _area_all, error)) = process_shape(shape_geometry, rtree, nlon) {
+    if let Some((cellid_fraction, area_all, error)) = process_shape(shape_geometry, rtree, nlon) {
         if error.abs() > area_error_threshold {
+            debug!("Processing basin: {}, Area: {}, Error is greater than threshold: {}", basin_id, area_all * 1e-6, error);
             for (cell_id, fraction) in cellid_fraction {
                 txt_data_chunk.push((basin_id.clone(), cell_id, fraction));
             }
         } else {
             let correction_factor = 1.0 / (1.0 - error);
+            debug!("Processing basin: {}, Area: {}, Error correction factor: {}", basin_id, area_all* 1e-6, correction_factor);
             for (cell_id, fraction) in cellid_fraction {
                 let corrected = fraction * correction_factor;
                 txt_data_chunk.push((basin_id.clone(), cell_id, corrected));
@@ -573,9 +578,9 @@ mod tests {
             "grid_gravitas",
             "-n", path_to_nc_str,
             "-d", "longitude,latitude",
-            "-v", "longitude,latitude",
+            "-c", "longitude,latitude",
             "-s", "custom.shp",
-            "-c", "custom_id",
+            "-i", "custom_id",
             "-o", path_to_hru_str,
         ];
         let cli = Cli::parse_from(args);
@@ -590,9 +595,9 @@ mod tests {
             "grid_gravitas",
             "-n", path_to_nc_str,
             "-d", "longitude,latitude",
-            "-v", "longitude,latitude",
+            "-c", "longitude,latitude",
             "-s", "custom.shp",
-            "-c", "custom_id",
+            "-i", "custom_id",
             "-o", path_to_hru_str,
             "--grd-bnds",
         ];

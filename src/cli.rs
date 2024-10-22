@@ -12,19 +12,19 @@ pub struct Cli {
 
     /// Dimension names of longitude (x) and latitude (y) (in this order). Example: "rlon,rlat", or "x,y"
     #[arg(short = 'd', long, default_values = &["x", "y"], value_delimiter = ',')]
-    pub dimname: Vec<String>,
+    pub dim: Vec<String>,
 
     /// Variable names of longitude and latitude in NetCDF (in this order). Example: "lon,lat"
-    #[arg(short = 'v', long, default_values = &["lon", "lat"], value_delimiter = ',')]
-    pub varname: Vec<String>,
+    #[arg(short = 'c', long, default_values = &["lon", "lat"], value_delimiter = ',')]
+    pub coord: Vec<String>,
 
     /// Path to the shapefile
     #[arg(short = 's', long)]
     pub shp: String,
 
-    /// Name of the column in the shapefile to use as the key
-    #[arg(short = 'c', long, default_value = "ID")]
-    pub col: String,
+    /// Name of the id in the shapefile to use as the key
+    #[arg(short = 'i', long, default_value = "ID")]
+    pub id: String,
 
     /// Flag if coordinates refer to grid centers (default) or grid bounds
     #[arg(short = 'b', long)]
@@ -46,6 +46,10 @@ pub struct Cli {
     #[arg(short = 'e', long, default_value = "EPSG:8857")]
     pub epsg: String,
 
+    /// Verbose mode
+    #[arg(short = 'v', long)]
+    pub verbose: bool,
+
 }
 
 
@@ -59,10 +63,10 @@ mod tests {
         let cli = Cli::parse_from(args);
 
         assert_eq!(cli.nc, "file.nc");
-        assert_eq!(cli.dimname, vec!["x", "y"]);
-        assert_eq!(cli.varname, vec!["lon", "lat"]);
+        assert_eq!(cli.dim, vec!["x", "y"]);
+        assert_eq!(cli.coord, vec!["lon", "lat"]);
         assert_eq!(cli.shp, "file.shp");
-        assert_eq!(cli.col, "ID");
+        assert_eq!(cli.id, "ID");
         assert_eq!(cli.out, "output.nc");
         assert_eq!(cli.rv_out, false);
     }
@@ -73,22 +77,24 @@ mod tests {
             "grid_gravitas",
             "-n", "custom.nc",
             "-d", "rlon,rlat",
-            "-v", "longitude,latitude",
+            "-c", "longitude,latitude",
             "-s", "custom.shp",
-            "-c", "custom_id",
+            "-i", "custom_id",
             "-o", "custom_output.nc",
             "-r",
             "-p",
+            "-v",
         ];
         let cli = Cli::parse_from(args);
 
         assert_eq!(cli.nc, "custom.nc");
-        assert_eq!(cli.dimname, vec!["rlon", "rlat"]);
-        assert_eq!(cli.varname, vec!["longitude", "latitude"]);
+        assert_eq!(cli.dim, vec!["rlon", "rlat"]);
+        assert_eq!(cli.coord, vec!["longitude", "latitude"]);
         assert_eq!(cli.shp, "custom.shp");
-        assert_eq!(cli.col, "custom_id");
+        assert_eq!(cli.id, "custom_id");
         assert_eq!(cli.out, "custom_output.nc");
         assert_eq!(cli.rv_out, true);
         assert_eq!(cli.parallel, true);
+        assert_eq!(cli.verbose, true);
     }
 }

@@ -25,7 +25,7 @@ use crate::cli::Cli;
 pub fn read_lat_lon(file: &netcdf::File, args: &Cli) -> Result<(ndarray::Array2<f32>, ndarray::Array2<f32>), Box<dyn Error>> {
 
     // Unpack dimension and variable names
-    let (var_lon, var_lat) = (&args.varname[0], &args.varname[1]);
+    let (var_lon, var_lat) = (&args.coord[0], &args.coord[1]);
     
     let lat_var = file
         .variable(var_lat).ok_or("Latitude variable not found")?;
@@ -50,7 +50,7 @@ pub fn read_lat_lon(file: &netcdf::File, args: &Cli) -> Result<(ndarray::Array2<
     let lon_dim_names: Vec<String> = lon_dims.iter().map(|d| d.name().to_string()).collect();
 
     // Extract expected dimension names from CLI
-    let expected_dimname = &args.dimname;
+    let expected_dimname = &args.dim;
 
     // Initialize variables to hold the final arrays
     let lat_final: Array2<f32>;
@@ -294,15 +294,16 @@ mod tests {
         let file = netcdf::open(nc_path).unwrap();
         let args = Cli {
             nc: nc_path_string,
-            dimname: vec!["longitude".to_string(), "latitude".to_string()],
-            varname: vec!["longitude".to_string(), "latitude".to_string()],
+            dim: vec!["longitude".to_string(), "latitude".to_string()],
+            coord: vec!["longitude".to_string(), "latitude".to_string()],
             shp: shp_path_string,
-            col: "HRU_ID".to_string(),
+            id: "HRU_ID".to_string(),
             out: "output.nc".to_string(),
             rv_out: false,
             grd_bnds: false,
             parallel: false,
             epsg: "EPSG:8857".to_string(),
+            verbose: false,
         };
         let result = read_lat_lon(&file, &args);        
         assert!(result.is_ok());
@@ -320,15 +321,16 @@ mod tests {
         let file = netcdf::open(nc_path).unwrap();
         let args = Cli {
             nc: nc_path_string,
-            dimname: vec!["lon".to_string(), "lat".to_string()],
-            varname: vec!["lon".to_string(), "lat".to_string()],
+            dim: vec!["lon".to_string(), "lat".to_string()],
+            coord: vec!["lon".to_string(), "lat".to_string()],
             shp: shp_path_string,
-            col: "HRU_ID".to_string(),
+            id: "HRU_ID".to_string(),
             out: "output.nc".to_string(),
             rv_out: false,
             grd_bnds: false,
             parallel: false,
             epsg: "EPSG:8857".to_string(),
+            verbose: false,
         };
         let result = read_lat_lon(&file, &args);
         assert!(result.is_ok());
