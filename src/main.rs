@@ -42,18 +42,19 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn run_with_args(args: Cli) -> Result<(), Box<dyn Error>> {
-    // Make grid of latitudes and longitudes
+    // Make grid of latitudes and longitudes (2D grid)
     let (lath, lonh, nlat, nlon) = process_lat_lon(&args)?;
     info!("Grid of latitudes and longitudes created with dimensions: {} x {}", nlat, nlon);
 
-    // Create grid of polygons for each grid cell
+    // Create grid of polygons for each grid cell (Polygons are used to check for intersections with shapefile)
     let grid_cell_geom = create_grid_cells(nlat, nlon, &lath, &lonh, &args.epsg)?;
 
     // Get the shapefile ID and geometry to a Vec of tuples
     let shapes = read_shapefile(Path::new(&args.shp), &args.id, &args.epsg)?;
     info!("Shapefile read with {} shapes", shapes.len());
 
-    // Process the shape intersections with grid cells
+    // Process the shape intersections with grid cells (either in parallel or serial)
+    // For large grids, parallel processing is recommended
     info!("Processing shape intersections with grid cells");
     let data: OutputDataType = match (args.parallel, args.rv_out) {
         (true, true) => OutputDataType::Txt(parallel_process_shape_intersections_txt(
@@ -70,7 +71,7 @@ fn run_with_args(args: Cli) -> Result<(), Box<dyn Error>> {
         )?),
     };
 
-    // Write to output file
+    // Write to output file (NetCDF can be used in xESMF or similar)
     let output_path = Path::new(&args.out);
     info!("Writing output to {:?}", output_path);
     match data {
