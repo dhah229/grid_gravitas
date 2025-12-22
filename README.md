@@ -72,9 +72,10 @@ Using Docker is the recommended way to develop and run `grid_gravitas` as it bun
 To run the internal Rust test suite and verify the environment:
 ```bash
 docker-compose up test
+```
 
 ### Running the Tool
-```
+```bash
 docker run --rm -v "$(pwd):/data" grid_gravitas \
     --nc /data/grid.nc \
     --shp /data/basins.shp \
