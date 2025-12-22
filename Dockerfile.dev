@@ -1,0 +1,24 @@
+FROM rust:slim-bookworm
+
+# Install all necessary geospatial build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libclang-dev \
+    clang \
+    cmake \
+    sqlite3 \
+    libsqlite3-dev \
+    libgdal-dev \
+    libgeos-dev \
+    libproj-dev \
+    libnetcdf-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy your source code into the image
+COPY . .
+
+# Set the default command to run tests
+# Using 'cargo test -- --nocapture' allows you to see println! output from your tests
+CMD ["cargo", "test", "--", "--nocapture"]

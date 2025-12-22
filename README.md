@@ -1,5 +1,6 @@
 # Grid Gravitas
-Grid Gravitas is a Rust-based command line tool designed to calculate weights based on the intersection of shapefiles and a grid for spatial averages. 
+`grid_gravitas` is a high-performance Rust tool designed to map geospatial points or shapes to grid cells in a NetCDF file. It leverages R-Trees for fast spatial lookups and supports parallel processing to handle large datasets efficiently.
+
 
 ## Background
 In hydrological modelling, it is often necessary to compute the spatial averages of gridded data using catchment (or basin) areas. To achieve this, one of the most common ways is to pre-compute the weights of the grid cells that intersect with the basin polygons and reuse those weights to determine the spatial averages. This is particularly useful when you have a large dataset (e.g., across multiple decades and multiple variables) and you want to avoid unnecessary computation. 
@@ -14,6 +15,20 @@ To install the package, you can run the following cargo command:
 cargo build --release
 ```
 This will create the binary in the `target/release` folder. You can copy this binary to a folder in your `PATH` or run it directly from the `target/release` folder.
+
+### Docker (optional)
+You can build and run a containerized version using the GDAL base image:
+```bash
+# Build the image
+docker build -t grid-gravitas .
+
+# Run with local data mounted at /data (example inputs provided in example/)
+docker run --rm -v $(pwd):/data grid-gravitas \
+  --nc /data/example/input_ERA5/era5-crop.nc \
+  --shp /data/example/maps/HRUs_coarse.shp \
+  --out /data/output.nc
+```
+The container entrypoint is `grid_gravitas`, and it will print the help text by default.
 
 ## Usage
 See [example.txt](example.txt) for an example. Note the example dataset comes from the [GridWeightsGenerator](https://github.com/julemai/GridWeightsGenerator).
@@ -47,10 +62,21 @@ For HRDPS data with ~7000 basins across Canada, the tool takes about 10 minutes 
 grid_gravitas --nc HRDPS_grid.nc --shp basins.shp --dimname rlon,rlat --varname lon,lat --id station_no --out HRDPS_weights.nc --epsg EPSG:3573 --parallel
 ```
 
+## Docker Support
 
-## TODO
-- [ ] Dockerize the tool for easier installation
-- [ ] Add more examples and documentation
-- [ ] Add more tests
-- [ ] Remove the nested Vec<>
+Using Docker is the recommended way to develop and run `grid_gravitas` as it bundles all necessary geospatial C-libraries (GDAL, PROJ, GEOS, and NetCDF).
 
+### Running Tests
+To run the internal Rust test suite and verify the environment:
+```bash
+docker-compose up test
+
+### Running the Tool
+```
+docker run --rm -v "$(pwd):/data" grid_gravitas \
+    --nc /data/grid.nc \
+    --shp /data/basins.shp \
+    --id station_id \
+    --out /data/weights.nc \
+    --parallel
+```

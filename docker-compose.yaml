@@ -1,0 +1,9 @@
+services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+    # The double dash is required to pass arguments to the test binary
+    command: cargo test -- --nocapture
