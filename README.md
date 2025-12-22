@@ -3,12 +3,14 @@
 
 
 ## Background
-In hydrological modelling, it is often necessary to compute the spatial averages of gridded data using catchment (or basin) areas. To achieve this, one of the most common ways is to pre-compute the weights of the grid cells that intersect with the basin polygons and reuse those weights to determine the spatial averages. This is particularly useful when you have a large dataset (e.g., across multiple decades and multiple variables) and you want to avoid unnecessary computation. 
+In hydrological modelling, it is often necessary to compute the spatial averages of gridded data using catchment (or basin) areas. To achieve this, one of the most common ways is to pre-compute the weights of the grid cells that intersect with the basin polygons and apply those weights to determine the spatial averages. This is particularly useful when you have a large dataset (e.g., across multiple decades and multiple variables) and you want to avoid unnecessary computation. 
 
-For small number of polygons and/or small grids, I recommend the [GridWeightsGenerator](https://github.com/julemai/GridWeightsGenerator) or [xESMF](https://xesmf.readthedocs.io/en/stable/), which are simple to use and easy to get started. However, for numerous polygons and/or large grids, grid weights generation can take a long time and can be quite burdensome if we have to compute the weights for multiple grids (e.g., ERA5, HRDPS, HRRR, and so on). This inspired me to build this tool that takes inspiration from the aforementioned methods but leverages parallel computation targted for large grid weights generation. Under the hood, Grid Gravitas uses GDAL, GEOS, PROJ, and netcdf for data processing and computation.
+For small number of polygons and/or small grids, I recommend the [GridWeightsGenerator](https://github.com/julemai/GridWeightsGenerator) or [xESMF](https://xesmf.readthedocs.io/en/stable/), which are simple to use and easy to get started. However, for numerous polygons and/or large grids, grid weights generation can take a long time and can be quite burdensome if we have to compute the weights for multiple grids (e.g., ERA5, HRDPS, HRRR, and so on). 
+
 
 ## Installation
-To install this package, it is assumed that you have [Rust](https://www.rust-lang.org/tools/install) installed on your machine, along with `GDAL`, `GEOS`, `PROJ` and `netcdf` binaries. For reference, you can install these dependencies with `conda` with the environment file provided in the [environment.yml](environment.yml) file. You may need to set the necessary environment variables like `LIBCLANG_PATH`, `PKG_CONFIG_PATH`, and `LD_LIBRARY_PATH` (see for example [env_vars.sh](env_vars.sh)).
+
+To install this package, it is assumed that you have [Rust](https://www.rust-lang.org/tools/install) installed on your machine, along with `GDAL`, `GEOS`, `PROJ` and `netcdf` binaries. The package can be installed through docker (please see below). 
 
 To install the package, you can run the following cargo command:
 ```bash
